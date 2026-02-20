@@ -907,9 +907,10 @@ window.renderCards = (dataToRender) => {
 
 // Hacemos la función global para que el Event Listener Delegado pueda encontrarla.
 window.showDetailsModal = (item) => {
-
-    console.log("=== DEBUG - Datos completos del chequeo ===");
-    console.log(JSON.stringify(item, null, 2));
+    console.log("=== DEBUG showDetailsModal ejecutado ===");
+    console.log("Current sheet:", currentSheet);
+    console.log("Item recibido (raw):", item);
+    console.log("JSON del item:", JSON.stringify(item, null, 2));
 
     // Lógica para determinar el tipo de chequeo basada en la hoja actual o la hoja de origen
     const isRecorridoCheck = currentSheet === "Recorridos_Consolidados";
