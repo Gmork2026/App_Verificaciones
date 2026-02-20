@@ -1,0 +1,330 @@
+/**
+ * Nombre del Archivo: Código.gs
+ * Función: Leer datos dinámicamente de diferentes hojas, normalizarlos
+ * y servirlos como una API JSON.
+ */
+
+const VIGILADORES_MAX = 4; // Máximo de vigiladores en una entrada
+const DEFAULT_SHEET = "Verificacion de Baterias/Patrullas";
+
+function doGet(e) {
+  const requestedSheet = e.parameter.sheet || DEFAULT_SHEET; 
+  
+  try {
+    const data = getNormalizedData(requestedSheet); 
+    
+    const jsonString = JSON.stringify(data);
+    
+    const output = ContentService.createTextOutput(jsonString)
+      .setMimeType(ContentService.MimeType.JSON);
+      
+    return output;
+    
+  } catch (error) {
+    Logger.log(`Error al procesar hoja '${requestedSheet}': ${error.toString()}`);
+    
+    const errorString = JSON.stringify({ 
+      error: `Error al procesar los datos de la hoja '${requestedSheet}': ${error.message || error.toString()}` 
+    });
+    
+    return ContentService.createTextOutput(errorString)
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+/**
+ * Función de NORMALIZACIÓN principal.
+ */
+function getNormalizedData(sheetName) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(sheetName);
+  
+  if (!sheet) {
+    throw new Error(`Hoja no encontrada: ${sheetName}.`);
+  }
+  
+  const values = sheet.getDataRange().getValues();
+  if (values.length <= 1) {
+    return []; 
+  }
+
+  const headers = values[0];
+  const dataRows = values.slice(1);
+
+  switch (sheetName) {
+    case "Verificacion de Baterias/Patrullas":
+    case "Verificacion de sitios Aysa":
+    case "Verificacion de objetivos MAC":
+      return normalizeSheetsWithVigilantes(sheetName, headers, dataRows);
+      
+    case "verificacion de bases":
+      return normalizeBasesSheet(headers, dataRows);
+      
+    // 🚨 NUEVO: Manejar la hoja consolidada directamente
+    case "Recorridos_Consolidados":
+      return normalizeConsolidatedSheet(headers, dataRows);
+      
+    default:
+      throw new Error("Pestaña no reconocida o mapeo faltante.");
+  }
+}
+
+/**
+ * Función auxiliar para encontrar el índice de un campo, buscando múltiples variaciones
+ */
+function findHeaderIndex(headers, potentialHeaders) {
+    for (const pHeader of potentialHeaders) {
+        const index = headers.slice().map(h => h.trim()).indexOf(pHeader.trim());
+        if (index !== -1) return index;
+    }
+    return -1; // No encontrado
+}
+
+
+// =========================================================================
+// 🚨 FUNCIONES NUEVAS PARA CONSOLIDACIÓN Y SERVICIO DEL API 🚨
+// =========================================================================
+
+/**
+ * Función CRÍTICA: Consolida los datos de las 4 hojas de verificación en una única hoja.
+ * DEBE EJECUTARSE PERIÓDICAMENTE (usando un activador/trigger).
+ */
+function consolidarRecorridos() {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  
+  const consolidationMap = {
+    "Verificacion de Baterias/Patrullas": "Seleccione Patrulla/batería", 
+    "Verificacion de objetivos MAC": "Seleccione un Objetivo", 
+    "Verificacion de sitios Aysa": "Seleccione un Sitio", 
+    "verificacion de bases": "Seleccione Base"
+  };
+  
+  const targetSheetName = "Recorridos_Consolidados";
+  let targetSheet = spreadsheet.getSheetByName(targetSheetName);
+  
+  if (!targetSheet) {
+    targetSheet = spreadsheet.insertSheet(targetSheetName);
+  }
+  targetSheet.clearContents();
+  
+  // Encabezados uniformes que espera el Frontend y que coinciden con sus claves de objeto
+  // Esto es vital para que la API JSON sepa qué campos servir.
+  const consolidatedHeaders = ["timestamp", "emailSupervisor", "patrullaNombre", "HojaOrigen"];
+  let allConsolidatedData = [consolidatedHeaders]; 
+  
+  for (const sheetName in consolidationMap) {
+    const sourceSheet = spreadsheet.getSheetByName(sheetName);
+    if (!sourceSheet || sourceSheet.getLastRow() < 2) continue;
+    
+    const headers = sourceSheet.getRange(1, 1, 1, sourceSheet.getLastColumn()).getValues()[0];
+    const dataRange = sourceSheet.getRange(2, 1, sourceSheet.getLastRow() - 1, sourceSheet.getLastColumn());
+    const data = dataRange.getValues();
+    
+    // Usamos .indexOf() directamente ya que los encabezados son fijos en el formulario
+    const timestampIndex = headers.indexOf("Marca temporal");
+    const supervisorIndex = headers.indexOf("Dirección de correo electrónico");
+    const puntoChequeadoIndex = headers.indexOf(consolidationMap[sheetName]);
+
+    if (timestampIndex === -1 || supervisorIndex === -1 || puntoChequeadoIndex === -1) {
+      Logger.log(`Error: No se encontraron todas las columnas clave en la hoja: ${sheetName}`);
+      continue;
+    }
+    
+    const mappedData = data.map(row => {
+      return [
+        row[timestampIndex],       // -> timestamp
+        row[supervisorIndex],      // -> emailSupervisor
+        row[puntoChequeadoIndex],  // -> patrullaNombre
+        sheetName                  // -> HojaOrigen
+      ];
+    });
+    
+    allConsolidatedData = allConsolidatedData.concat(mappedData);
+  }
+  
+  if (allConsolidatedData.length > 1) { 
+    targetSheet.getRange(1, 1, allConsolidatedData.length, allConsolidatedData[0].length).setValues(allConsolidatedData);
+  } 
+}
+
+/**
+ * Lógica de normalización para la hoja "Recorridos_Consolidados".
+ * Convierte las filas de la hoja pre-normalizada en objetos JSON, añadiendo valores por defecto.
+ */
+function normalizeConsolidatedSheet(headers, dataRows) {
+  const normalizedData = [];
+  
+  // Nombres de las columnas clave (ya son uniformes)
+  const requiredHeaders = {
+      timestamp: headers.indexOf("timestamp"),
+      emailSupervisor: headers.indexOf("emailSupervisor"),
+      patrullaNombre: headers.indexOf("patrullaNombre"),
+      HojaOrigen: headers.indexOf("HojaOrigen")
+  };
+
+  // Verificación de integridad
+  if (Object.values(requiredHeaders).includes(-1)) {
+       throw new Error("La hoja 'Recorridos_Consolidados' tiene un formato incorrecto. Debe ejecutar 'consolidarRecorridos' primero.");
+  }
+
+  dataRows.forEach(row => {
+    const entry = {
+      // Mapeo directo de campos de la hoja consolidada
+      timestamp: row[requiredHeaders.timestamp] ? new Date(row[requiredHeaders.timestamp]).toLocaleString() : null,
+      emailSupervisor: String(row[requiredHeaders.emailSupervisor] || ''), 
+      patrullaNombre: String(row[requiredHeaders.patrullaNombre] || ''), 
+      HojaOrigen: String(row[requiredHeaders.HojaOrigen] || 'Desconocido'),
+      
+      // Campos de Vigilador/Móvil que el frontend espera, pero no son relevantes para el recorrido
+      // Se añaden con valores 'N/A' o vacíos para mantener la consistencia de la estructura JSON.
+      vigiladores: [],
+      movilDominio: 'N/A',
+      kilometraje: 'N/A',
+      combustibleFraccion: 'N/A',
+      higieneMovil: 'N/A',
+      poseeBotiquin: 'N/A',
+      observacionesMovil: 'Sin observaciones'
+    };
+    
+    normalizedData.push(entry);
+  });
+  
+  return normalizedData;
+}
+
+
+// =========================================================================
+// 🚨 FUNCIONES EXISTENTES ORIGINALES (se mantienen sin cambios importantes) 🚨
+// =========================================================================
+
+/**
+ * Lógica de normalización para hojas con bloques de datos de Vigilantes repetidos.
+ */
+function normalizeSheetsWithVigilantes(sheetName, headers, dataRows) {
+  // ... (Tu código original aquí) ...
+  const normalizedData = [];
+  
+  const VIG_START_INDEX = headers.indexOf("Numero de legajo"); 
+  const VIG_BLOCK_SIZE = 6; 
+
+  const mapEntry = (row) => {
+    let entry = {
+      // Campos Comunes
+      timestamp: row[headers.indexOf("Marca temporal")] ? new Date(row[headers.indexOf("Marca temporal")]).toLocaleString() : null,
+      emailSupervisor: String(row[headers.indexOf("Dirección de correo electrónico")] || ''),
+      vigiladores: []
+    };
+    
+    const isFixedPost = sheetName === "Verificacion de objetivos MAC";
+    const isSiteCheck = sheetName === "Verificacion de sitios Aysa";
+    
+    // Mapeo del Objetivo/Sitio/Patrulla
+    if (isFixedPost) {
+        entry.patrullaNombre = String(row[findHeaderIndex(headers, ["Seleccione un Objetivo"])] || '');
+    } else if (isSiteCheck) {
+        entry.patrullaNombre = String(row[findHeaderIndex(headers, ["Seleccione un Sitio"])] || '');
+    } else {
+        entry.patrullaNombre = String(row[findHeaderIndex(headers, ["Seleccione Patrulla/batería"])] || '');
+    }
+
+    // Mapeo de campos del Móvil (aplicable a todos EXCEPTO MAC)
+    if (!isFixedPost) {
+        entry.movilDominio = String(row[findHeaderIndex(headers, ["Móvil: Numero y dominio (por ej. M12 AA123BB)", "Móvil: numero y dominio (Ej. M12 AA123BB)"])] || '');
+        entry.kilometraje = String(row[findHeaderIndex(headers, ["Kilometraje del vehículo", "kilometraje"])] || 0); // Kilometraje como string para N/A
+        
+        entry.combustibleFraccion = String(row[findHeaderIndex(headers, ["Nivel de combustible expresado en fracciones", "Nivel de combustible en fracciones"])] || '0/16');
+        entry.higieneMovil = String(row[findHeaderIndex(headers, ["Higiene del móvil", "Higiene del servicio"])] || '');
+        entry.poseeBotiquin = String(row[findHeaderIndex(headers, ["¿Posee Botiquín?", "¿Posee botiquín?"])] || 'No'); 
+        
+        entry.observacionesMovil = String(row[findHeaderIndex(headers, ["Observaciones de lo anteriormente mencionado", "Observaciones del vigilador"])] || '');
+    } else {
+        // Valores por defecto para MAC (Puesto Fijo)
+        entry.movilDominio = "N/A - Fijo"; 
+        entry.kilometraje = "N/A";
+        entry.combustibleFraccion = "N/A";
+        entry.poseeBotiquin = "N/A";
+        entry.higieneMovil = String(row[findHeaderIndex(headers, ["Higiene del servicio"])] || '');
+        entry.observacionesMovil = String(row[findHeaderIndex(headers, ["Observaciones de lo anteriormente mencionado"])] || '');
+    }
+    
+    return entry;
+  };
+  
+  dataRows.forEach(row => {
+    const entry = mapEntry(row);
+    
+    for (let i = 0; i < VIGILADORES_MAX; i++) {
+      const start = VIG_START_INDEX + (i * VIG_BLOCK_SIZE);
+      const legajo = row[start];
+      
+      if (!legajo || String(legajo).trim() === "") {
+        continue;
+      }
+      
+      const vigilador = {
+        legajo: String(legajo), // Asegurar String
+        nombre: String(row[start + 1] || ''), // Asegurar String (CRÍTICO para evitar error 'split')
+        regControlado: String(row[start + 2] || 'No'), 
+        uniformeCompleto: String(row[start + 3] || 'No'), 
+        capacitacion: String(row[start + 4] || 'No'), 
+        observaciones: String(row[start + 5] || '')
+      };
+      
+      entry.vigiladores.push(vigilador);
+    }
+    normalizedData.push(entry);
+  });
+  
+  return normalizedData;
+}
+
+/**
+ * Lógica de normalización para la hoja "verificacion de bases" (sin vigilantes repetidos).
+ */
+function normalizeBasesSheet(headers, dataRows) {
+  const normalizedData = [];
+  
+  // Lista de mapeo de las columnas de equipamiento
+  const baseEquipamientoMap = [
+    { key: "poseeBotiquin", headers: ["¿Posee botiquin?"] },
+    { key: "poseeAuxilio", headers: ["¿Posee auxilio?"] },
+    { key: "poseeMatafuegos", headers: ["¿Posee matafuegos en vigencia?"] },
+    { key: "poseeBaliza", headers: ["¿Posee baliza?"] },
+    { key: "poseeLinterna", headers: ["¿Posee linterna?"] },
+    { key: "poseeCableBateria", headers: ["¿Posee cable para puentear bateria?"] },
+    { key: "poseeCapaLluvia", headers: ["¿Posee capa de lluvia?"] },
+    { key: "poseeDocumentacionMovil", headers: ["¿Posee toda la documentacion del movil?"] },
+    { key: "poseeLinga", headers: ["¿Posee linga?"] },
+    { key: "poseeCricket", headers: ["¿Posee cricket?"] },
+    { key: "poseeLlaveCruz", headers: ["¿Posee llave cruz?"] },
+  ];
+
+  dataRows.forEach(row => {
+    const entry = {
+      // Campos de Logística y Supervisor
+      timestamp: row[headers.indexOf("Marca temporal")] ? new Date(row[headers.indexOf("Marca temporal")]).toLocaleString() : null,
+      emailSupervisor: String(row[headers.indexOf("Dirección de correo electrónico")] || ''), 
+      
+      // Campos de Identificación
+      patrullaNombre: String(row[findHeaderIndex(headers, ["Seleccione Base"])] || ''),
+      movilDominio: String(row[findHeaderIndex(headers, ["Móvil: numero y dominio (por ej. M12 AA123BB)"])] || ''),
+      kilometraje: String(row[findHeaderIndex(headers, ["Kilometraje del vehículo"])] || 0),
+      combustibleFraccion: String(row[findHeaderIndex(headers, ["Nivel de combustible en fracciones"])] || '0/16'),
+      
+      // Campos de Chequeo General
+      higieneMovil: String(row[findHeaderIndex(headers, ["Higiene del móvil"])] || ''),
+      observacionesMovil: String(row[findHeaderIndex(headers, ["Observaciones"])] || ''),
+      vigiladores: [] 
+    };
+    
+    // Agregamos todos los campos de Equipamiento
+    baseEquipamientoMap.forEach(field => {
+        const value = row[findHeaderIndex(headers, field.headers)];
+        entry[field.key] = String(value || 'No');
+    });
+
+    normalizedData.push(entry);
+  });
+  
+  return normalizedData;
+}
