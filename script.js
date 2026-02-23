@@ -939,6 +939,34 @@ window.showDetailsModal = (item) => {
     const isRecorridoCheck = currentSheet === "Recorridos_Consolidados";
     const sheetType = isRecorridoCheck ? (item.HojaOrigen || currentSheet) : currentSheet;
 
+    // ════════════════════════════════════════════════════════════════════════
+    // BLOQUE ESPECÍFICO PARA PESTAÑA "Cambio de Turno" (nuevo)
+    // ════════════════════════════════════════════════════════════════════════
+    if (currentSheet === "Cambio de Turno") {
+        let html = `
+            <h4>Detalles del Cambio de Turno</h4>
+            <hr>
+            <p><strong>Fecha/Hora del Registro:</strong> ${item.timestamp || '—'}</p>
+            <p><strong>Conductor:</strong> ${item.conductor.nombre || '—'} (${item.conductor.legajo || '—'})</p>
+            <p><strong>Turno Inicio:</strong> ${item.turno.inicio || '—'}</p>
+            <p><strong>Turno Salida:</strong> ${item.turno.salida || '—'}</p>
+            <p><strong>Patente del Vehículo:</strong> ${item.vehiculo.patente || '—'}</p>
+            <p><strong>Estado del Vehículo:</strong> <span class="${item.hasAlert ? 'text-warning fw-bold' : 'text-success'}">${item.vehiculo.estado || '—'}</span></p>
+            <p><strong>Descripción del Estado:</strong> ${item.vehiculo.descripcionEstado || 'Sin descripción'}</p>
+            <p><strong>Kilometraje:</strong> ${item.vehiculo.kilometraje || '—'}</p>
+            <hr>
+            <p><strong>Acompañante Principal:</strong> ${item.acompanantePrincipal.nombre || '—'} (${item.acompanantePrincipal.legajo || '—'})</p>
+            <p><strong>Acompañante Opcional:</strong> ${item.acompananteOpcional.nombre || '—'} (${item.acompananteOpcional.legajo || '—'})</p>
+        `;
+
+        if (modalBody) modalBody.innerHTML = html;
+        if (detailsModal) detailsModal.style.display = 'block';
+        return; // Salimos aquí para NO ejecutar el resto del modal (vigiladores, bases, etc.)
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // Resto del modal (para otras pestañas: vigiladores, bases, patrullas, etc.)
+    // ════════════════════════════════════════════════════════════════════════
     const isBaseCheck = sheetType === "verificacion de bases";
     const isMovilCheck = sheetType !== "Verificacion de objetivos MAC" && sheetType !== "Verificacion de sitios Aysa" && !isBaseCheck;
 
@@ -1218,61 +1246,54 @@ function renderCambioTurnoTable(data) {
         return;
     }
 
-    // Orden descendente (más reciente arriba)
+    // Orden descendente
     data.sort((a, b) => {
-        const timeA = a.timestamp ? getDateSortValue(a.timestamp) : 0;
-        const timeB = b.timestamp ? getDateSortValue(b.timestamp) : 0;
+        const timeA = getDateSortValue(a.timestamp);
+        const timeB = getDateSortValue(b.timestamp);
         return timeB - timeA;
     });
 
     let html = `
-        <div class="table-responsive">
-            <table class="data-table cambio-turno-table">
-                <thead>
-                    <tr>
-                        <th>Fecha/Hora</th>
-                        <th>Conductor</th>
-                        <th>Legajo Cond.</th>
-                        <th>Turno Inicio</th>
-                        <th>Turno Salida</th>
-                        <th>Patente</th>
-                        <th>Estado Vehículo</th>
-                        <th>Descripción Estado</th>
-                        <th>Km</th>
-                        <th>Acompañante</th>
-                        <th>Legajo Ac.</th>
-                        <th>Opcional</th>
-                    </tr>
-                </thead>
-                <tbody>
+        <table class="data-table table-responsive cambio-turno-table">
+            <thead>
+                <tr>
+                    <th>Patente</th>
+                    <th>Turno Inicio</th>
+                    <th>Turno Salida</th>
+                    <th>Km</th>
+                    <th>Estado del Vehiculo</th>
+                    <th>Detalles</th>
+                </tr>
+            </thead>
+            <tbody>
     `;
 
-    data.forEach(item => {
+    data.forEach((item, index) => {
         const estadoLower = item.vehiculo.estado.toLowerCase();
         const estadoClass = 
             estadoLower.includes('malo') ? 'text-danger fw-bold' :
-            estadoLower.includes('regular') ? 'text-warning fw-bold' :
-            'text-success';
+            estadoLower.includes('regular') ? 'text-warning fw-bold' : 'text-success';
+
+        const itemDataString = JSON.stringify(item);
 
         html += `
             <tr ${item.hasAlert ? 'class="table-warning"' : ''}>
-                <td>${item.timestamp || '—'}</td>
-                <td>${item.conductor.nombre || '—'}</td>
-                <td>${item.conductor.legajo || '—'}</td>
+                <td><strong>${item.vehiculo.patente}</strong></td>
                 <td>${item.turno.inicio || '—'}</td>
                 <td>${item.turno.salida || '—'}</td>
-                <td><strong>${item.vehiculo.patente}</strong></td>
-                <td class="${estadoClass}">${item.vehiculo.estado}</td>
-                <td>${item.vehiculo.descripcionEstado || '—'}</td>
                 <td>${item.vehiculo.kilometraje}</td>
-                <td>${item.acompanantePrincipal.nombre || '—'}</td>
-                <td>${item.acompanantePrincipal.legajo || '—'}</td>
-                <td>${item.acompananteOpcional.nombre || '—'}</td>
+                <td class="${estadoClass}">${item.vehiculo.estado}</td>
+                <td>
+                    <button class="button-small" 
+                        onclick="window.showDetailsModal(JSON.parse(decodeURIComponent('${encodeURIComponent(itemDataString)}')))">
+                        Ver Detalle
+                    </button>
+                </td>
             </tr>
         `;
     });
 
-    html += '</tbody></table></div>';
+    html += '</tbody></table>';
     dataContainer.innerHTML = html;
 }
 
