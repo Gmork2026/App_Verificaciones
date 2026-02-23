@@ -205,6 +205,7 @@ const getDateSortValue = (timestampString) => {
 const loadData = async (sheetName) => {
     currentSheet = sheetName;
     const isRecorridoTab = sheetName === "Recorridos_Consolidados";
+    const isCambioTurno = sheetName === "Cambio de Turno";
 
     console.log(`LOAD DATA: Pestaña cargada: ${sheetName}. Es Recorrido? ${isRecorridoTab}`);
 
@@ -218,6 +219,19 @@ const loadData = async (sheetName) => {
             // y 'column' para móvil/tablet.
             const flexDir = (window.innerWidth > 900) ? 'row' : 'column';
             summarySection.style.flexDirection = flexDir; 
+        }
+
+        // Personalización para pestaña Cambio de Turno
+        if (isCambioTurno) {
+            // Ocultar elementos que no aplican en esta pestaña
+            if (searchInput) searchInput.style.display = 'block'; // lo dejamos visible
+            if (alertFilter) alertFilter.style.display = 'none';   // no usamos alertas por ahora
+            if (filterBar) filterBar.style.display = 'flex';
+
+            // Mensaje de carga específico
+            if (dataContainer) {
+                dataContainer.innerHTML = `<p class="loading-message">Cargando registros de Cambio de Turno...</p>`;
+            }
         }
 
         console.log(`VISIBILITY LOG: summarySection display set to: ${newDisplay}`);
@@ -272,6 +286,12 @@ const loadData = async (sheetName) => {
         if (!isRecorridoTab) {
             sheetData = checkInactivity(sheetData);
             window.filterAndSearch();
+
+            if (isCambioTurno) {
+            // Para esta pestaña no aplicamos checkInactivity ni filterAndSearch estándar
+            // Simplemente renderizamos directamente
+            renderData(sheetData);
+}
 
         } else {
             // Ejecutar el sumario y obtener los datos agrupados por supervisor y día
@@ -751,6 +771,14 @@ const getDynamicHeaders = () => {
 };
 
 window.renderData = (dataToRender) => {
+    
+    if (currentSheet === "Cambio de Turno") {
+        renderCambioTurnoTable(dataToRender);
+        if (countDisplay) countDisplay.textContent = dataToRender.length;
+        if (resultsTitle) resultsTitle.textContent = `Registros de Cambio de Turno (${dataToRender.length})`;
+        return;
+    }
+
     if (!dataContainer) {
           return;
     }
@@ -1179,5 +1207,67 @@ const initialize = () => {
 
     loadData(currentSheet);
 };
+
+function renderCambioTurnoTable(data) {
+    if (!dataContainer) return;
+
+    dataContainer.innerHTML = '';
+
+    if (data.length === 0) {
+        dataContainer.innerHTML = '<p class="text-center text-muted p-4">No hay registros de cambio de turno.</p>';
+        return;
+    }
+
+    let html = `
+        <table class="data-table table-responsive cambio-turno-table">
+            <thead>
+                <tr>
+                    <th>Fecha/Hora</th>
+                    <th>Conductor</th>
+                    <th>Legajo Cond.</th>
+                    <th>Turno Inicio</th>
+                    <th>Turno Salida</th>
+                    <th>Patente</th>
+                    <th>Estado Vehículo</th>
+                    <th>Km</th>
+                    <th>Acompañante</th>
+                    <th>Legajo Ac.</th>
+                    <th>Opcional</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+
+    data.sort((a, b) => {
+        return new Date(b.timestamp) - new Date(a.timestamp); // descendente
+    });
+
+    data.forEach(item => {
+        const estadoLower = item.vehiculo.estado.toLowerCase();
+        const estadoClass = 
+            estadoLower.includes('malo') ? 'text-danger fw-bold' :
+            estadoLower.includes('regular') ? 'text-warning fw-bold' :
+            'text-success';
+
+        html += `
+            <tr ${item.hasAlert ? 'class="table-warning"' : ''}>
+                <td>${item.timestamp || '—'}</td>
+                <td>${item.conductor.nombre || '—'}</td>
+                <td>${item.conductor.legajo || '—'}</td>
+                <td>${item.turno.inicio || '—'}</td>
+                <td>${item.turno.salida || '—'}</td>
+                <td><strong>${item.vehiculo.patente}</strong></td>
+                <td class="${estadoClass}">${item.vehiculo.estado}</td>
+                <td>${item.vehiculo.kilometraje}</td>
+                <td>${item.acompanantePrincipal.nombre || '—'}</td>
+                <td>${item.acompanantePrincipal.legajo || '—'}</td>
+                <td>${item.acompananteOpcional.nombre || '—'}</td>
+            </tr>
+        `;
+    });
+
+    html += '</tbody></table>';
+    dataContainer.innerHTML = html;
+}
 
 window.onload = initialize;
