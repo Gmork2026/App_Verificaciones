@@ -827,12 +827,12 @@ window.renderTable = (dataToRender) => {
 
         let vigiladoresSummary = 'N/A';
         if (item.vigiladores && item.vigiladores.length > 0) {
-             vigiladoresSummary = item.vigiladores.map(v => {
-                 const namePart = (v.nombre && typeof v.nombre === 'string') ? v.nombre.split(' ')[0] : 'Vigilador';
-                 const regStatus = (v.regControlado && v.regControlado.length > 0) ? v.regControlado.substring(0,1) : '?';
-                 const uniStatus = (v.uniformeCompleto && v.uniformeCompleto.length > 0) ? v.uniformeCompleto.substring(0,1) : '?';
-                 return `${namePart} (${uniStatus}/${regStatus})`;
-             }).join('<br>');
+        vigiladoresSummary = item.vigiladores.slice(0, 2).map(v => { // Solo los primeros 2
+            const namePart = (v.nombre && typeof v.nombre === 'string') ? v.nombre.split(' ')[0] : 'Vigilador';
+            const regStatus = (v.regControlado && v.regControlado.length > 0) ? v.regControlado.substring(0,1) : '?';
+            const uniStatus = (v.uniformeCompleto && v.uniformeCompleto.length > 0) ? v.uniformeCompleto.substring(0,1) : '?';
+            return `${namePart} (${uniStatus}/${regStatus})`;
+        }).join('<br>');
         }
 
         const combustibleDisplay = item.combustibleFraccion || 'N/A';
