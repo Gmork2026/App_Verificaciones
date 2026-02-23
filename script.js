@@ -154,59 +154,39 @@ window.toggleRepetitionDetails = () => {
 // ====================================================================================================
 
 /**
- * Parser robusto para timestamps en formato DD/MM/YYYY HH:MM:SS (24h sin AM/PM)
- * Prioriza formato argentino/español y maneja casos sin coma.
+ * Función auxiliar para obtener un valor numérico (milisegundos) comparable basado en la fecha y hora.
+ * Optimizado para formato DD/MM/YYYY HH:MM:SS (24h, sin AM/PM, sin coma).
+ * Evita desfases de timezone usando local time.
  */
 const getDateSortValue = (timestampString) => {
-    if (!timestampString || typeof timestampString !== 'string') return 0;
+    if (!timestampString) return 0;
 
-    // Limpieza agresiva: eliminar espacios extras, normalizar
-    const clean = timestampString.trim().replace(/\s+/g, ' ');
+    // Limpieza: eliminar espacios extras
+    timestampString = timestampString.trim().replace(/\s+/g, ' ');
 
-    // Intentar dividir por espacio (formato sin coma: "DD/MM/YYYY HH:MM:SS")
-    let dateStr = '', timeStr = '';
-    const spaceSplit = clean.split(' ');
-    
-    if (spaceSplit.length >= 2) {
-        dateStr = spaceSplit[0];
-        timeStr = spaceSplit.slice(1).join(' ');
-    } else if (clean.includes(',')) {
-        // Fallback para formato con coma
-        const commaSplit = clean.split(',');
-        dateStr = commaSplit[0]?.trim() || '';
-        timeStr = commaSplit[1]?.trim() || '';
-    } else {
-        return 0; // formato inválido
+    // Regex seguro para extraer DD/MM/YYYY y HH:MM:SS
+    const match = timestampString.match(/(\d{2}\/\d{2}\/\d{4})\s?(\d{2}:\d{2}:\d{2})/);
+    if (!match) {
+        console.warn(`DEBUG getDateSortValue: Formato inválido "${timestampString}"`);
+        return 0;
     }
 
-    // Parsing fecha DD/MM/YYYY
-    const dateParts = dateStr.split('/');
-    if (dateParts.length !== 3) return 0;
+    const dateStr = match[1];
+    const timeStr = match[2];
 
-    const day   = parseInt(dateParts[0], 10);
-    const month = parseInt(dateParts[1], 10) - 1;
-    const year  = parseInt(dateParts[2], 10);
+    const [day, month, year] = dateStr.split('/').map(n => parseInt(n, 10));
+    const [hour, minute, second] = timeStr.split(':').map(n => parseInt(n, 10));
 
-    if (isNaN(day) || isNaN(month) || isNaN(year) || year < 2000) return 0;
-
-    // Parsing hora HH:MM:SS (asumimos 24h si no hay AM/PM)
-    const timeParts = timeStr.split(':');
-    let hour   = parseInt(timeParts[0], 10) || 0;
-    let minute = parseInt(timeParts[1], 10) || 0;
-    let second = parseInt(timeParts[2], 10) || 0;
-
-    // Si hay AM/PM (caso raro en tus datos), ajustar
-    if (timeStr.includes(' ')) {
-        const ampm = timeStr.split(' ')[1]?.toLowerCase();
-        if (ampm === 'p.m.' && hour !== 12) hour += 12;
-        if (ampm === 'a.m.' && hour === 12) hour = 0;
+    if (isNaN(day) || isNaN(month) || isNaN(year) || isNaN(hour)) {
+        console.warn(`DEBUG getDateSortValue: Parse fallido en "${timestampString}"`);
+        return 0;
     }
 
-    // Crear fecha en UTC (evita desfases de zona horaria Argentina -03)
-    const dateObj = new Date(Date.UTC(year, month, day, hour, minute, second));
+    // Crear Date en timezone local (no UTC, para evitar -3h en Argentina)
+    const dateObj = new Date(year, month - 1, day, hour, minute, second);
 
-    // Debug temporal - quitar después de validar
-    console.log(`DEBUG getDateSortValue: Input="${timestampString}" → UTC=${dateObj.toISOString()} → Local hour=${hour.toString().padStart(2,'0')}:${minute.toString().padStart(2,'0')}:${second.toString().padStart(2,'0')}`);
+    // Debug detallado
+    console.log(`DEBUG getDateSortValue: Input="${timestampString}" → Parsed="${dateObj.toLocaleString('es-AR')}" → Hour=${hour.toString().padStart(2,'0')}`);
 
     return isNaN(dateObj.getTime()) ? 0 : dateObj.getTime();
 };
@@ -607,22 +587,13 @@ const renderRecorridoForDate = (dayISO, supervisorName, dailyRecorrido) => {
 
     let html = '';
 
-    // Día del header - usar fecha parseada del primer chequeo
-    let dayCheck = 'Fecha desconocida';
-    if (checks[0]?.timestamp) {
-        const parsed = new Date(getDateSortValue(checks[0].timestamp));
-        if (!isNaN(parsed.getTime())) {
-            dayCheck = parsed.toLocaleDateString('es-AR', {
-                weekday: 'long',
-                day: 'numeric',
-                month: 'long',
-                year: 'numeric'
-            });
-        } else {
-            dayCheck = checks[0].timestamp.split(' ')[0] || dayISO;
+    // Día del header - usar el primer chequeo parseado
+    let dayCheck = new Date(dayISO).toLocaleDateString('es-AR');
+    if (checks[0].timestamp) {
+        const parsedDate = new Date(getDateSortValue(checks[0].timestamp));
+        if (!isNaN(parsedDate.getTime())) {
+            dayCheck = parsedDate.toLocaleDateString('es-AR');
         }
-    } else {
-        dayCheck = new Date(dayISO).toLocaleDateString('es-AR');
     }
 
     html += `<div class="card recorrido-day-card">
@@ -630,19 +601,17 @@ const renderRecorridoForDate = (dayISO, supervisorName, dailyRecorrido) => {
                  <ul class="list-group list-group-flush recorrido-timeline">`;
 
     checks.forEach((check) => {
-        let timePart = '—';
+        let timePart = 'N/A';
         if (check.timestamp) {
-            const parsed = new Date(getDateSortValue(check.timestamp));
-            if (!isNaN(parsed.getTime())) {
-                timePart = parsed.toLocaleTimeString('es-AR', {
+            const parsedDate = new Date(getDateSortValue(check.timestamp));
+            if (!isNaN(parsedDate.getTime())) {
+                timePart = parsedDate.toLocaleTimeString('es-AR', {
                     hour: '2-digit',
                     minute: '2-digit',
-                    hour12: false  // 24h forzado: 14:05
+                    hour12: false  // 24h
                 });
             } else {
-                // Fallback muy básico si el parse falla
-                const parts = check.timestamp.split(' ');
-                timePart = parts.length > 1 ? parts[1] : '—';
+                timePart = check.timestamp.split(' ')[1] || 'N/A'; // fallback directo
             }
         }
 
