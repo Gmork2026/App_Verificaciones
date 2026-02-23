@@ -1218,29 +1218,34 @@ function renderCambioTurnoTable(data) {
         return;
     }
 
-    let html = `
-        <table class="data-table table-responsive cambio-turno-table">
-            <thead>
-                <tr>
-                    <th>Fecha/Hora</th>
-                    <th>Conductor</th>
-                    <th>Legajo Cond.</th>
-                    <th>Turno Inicio</th>
-                    <th>Turno Salida</th>
-                    <th>Patente</th>
-                    <th>Estado Vehículo</th>
-                    <th>Km</th>
-                    <th>Acompañante</th>
-                    <th>Legajo Ac.</th>
-                    <th>Opcional</th>
-                </tr>
-            </thead>
-            <tbody>
-    `;
-
+    // Orden descendente (más reciente arriba)
     data.sort((a, b) => {
-        return new Date(b.timestamp) - new Date(a.timestamp); // descendente
+        const timeA = a.timestamp ? getDateSortValue(a.timestamp) : 0;
+        const timeB = b.timestamp ? getDateSortValue(b.timestamp) : 0;
+        return timeB - timeA;
     });
+
+    let html = `
+        <div class="table-responsive">
+            <table class="data-table cambio-turno-table">
+                <thead>
+                    <tr>
+                        <th>Fecha/Hora</th>
+                        <th>Conductor</th>
+                        <th>Legajo Cond.</th>
+                        <th>Turno Inicio</th>
+                        <th>Turno Salida</th>
+                        <th>Patente</th>
+                        <th>Estado Vehículo</th>
+                        <th>Descripción Estado</th>
+                        <th>Km</th>
+                        <th>Acompañante</th>
+                        <th>Legajo Ac.</th>
+                        <th>Opcional</th>
+                    </tr>
+                </thead>
+                <tbody>
+    `;
 
     data.forEach(item => {
         const estadoLower = item.vehiculo.estado.toLowerCase();
@@ -1258,6 +1263,7 @@ function renderCambioTurnoTable(data) {
                 <td>${item.turno.salida || '—'}</td>
                 <td><strong>${item.vehiculo.patente}</strong></td>
                 <td class="${estadoClass}">${item.vehiculo.estado}</td>
+                <td>${item.vehiculo.descripcionEstado || '—'}</td>
                 <td>${item.vehiculo.kilometraje}</td>
                 <td>${item.acompanantePrincipal.nombre || '—'}</td>
                 <td>${item.acompanantePrincipal.legajo || '—'}</td>
@@ -1266,7 +1272,7 @@ function renderCambioTurnoTable(data) {
         `;
     });
 
-    html += '</tbody></table>';
+    html += '</tbody></table></div>';
     dataContainer.innerHTML = html;
 }
 
