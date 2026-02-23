@@ -154,39 +154,48 @@ window.toggleRepetitionDetails = () => {
 // ====================================================================================================
 
 /**
- * Función auxiliar para obtener un valor numérico (milisegundos) comparable basado en la fecha y hora.
- * Optimizado para formato DD/MM/YYYY HH:MM:SS (24h, sin AM/PM, sin coma).
- * Evita desfases de timezone usando local time.
+ * Parser ROBUSTO y ESPECÍFICO para timestamps "DD/MM/YYYY HH:MM:SS" (24h sin coma ni AM/PM).
+ * Usa Date en local time sin UTC para evitar desfases -3h en Argentina.
+ * Incluye validación estricta y debug.
  */
 const getDateSortValue = (timestampString) => {
-    if (!timestampString) return 0;
+    if (!timestampString || typeof timestampString !== 'string') {
+        console.warn('getDateSortValue: input inválido', timestampString);
+        return 0;
+    }
 
-    // Limpieza: eliminar espacios extras
-    timestampString = timestampString.trim().replace(/\s+/g, ' ');
+    // Limpieza: solo espacios simples
+    const clean = timestampString.trim().replace(/\s+/g, ' ');
 
-    // Regex seguro para extraer DD/MM/YYYY y HH:MM:SS
-    const match = timestampString.match(/(\d{2}\/\d{2}\/\d{4})\s?(\d{2}:\d{2}:\d{2})/);
+    // Regex preciso para "DD/MM/YYYY HH:MM:SS" o "DD/MM/YYYY, HH:MM:SS"
+    const regex = /^(\d{2})\/(\d{2})\/(\d{4})\s*,?\s*(\d{1,2}):(\d{2}):?(\d{2})?$/;
+    const match = clean.match(regex);
+
     if (!match) {
-        console.warn(`DEBUG getDateSortValue: Formato inválido "${timestampString}"`);
+        console.warn(`getDateSortValue: formato NO reconocido "${clean}"`);
         return 0;
     }
 
-    const dateStr = match[1];
-    const timeStr = match[2];
+    const [, day, month, year, hourStr, min, sec = '00'] = match;
 
-    const [day, month, year] = dateStr.split('/').map(n => parseInt(n, 10));
-    const [hour, minute, second] = timeStr.split(':').map(n => parseInt(n, 10));
+    const d = parseInt(day, 10);
+    const m = parseInt(month, 10) - 1;
+    const y = parseInt(year, 10);
+    let h = parseInt(hourStr, 10);
+    const minNum = parseInt(min, 10);
+    const s = parseInt(sec, 10);
 
-    if (isNaN(day) || isNaN(month) || isNaN(year) || isNaN(hour)) {
-        console.warn(`DEBUG getDateSortValue: Parse fallido en "${timestampString}"`);
+    // Validación estricta
+    if (isNaN(d) || isNaN(m) || isNaN(y) || isNaN(h) || isNaN(minNum) || isNaN(s)) {
+        console.warn(`getDateSortValue: valores NaN en "${clean}"`);
         return 0;
     }
 
-    // Crear Date en timezone local (no UTC, para evitar -3h en Argentina)
-    const dateObj = new Date(year, month - 1, day, hour, minute, second);
+    // Crear Date en timezone LOCAL (no UTC) → respeta la hora que el usuario ve
+    const dateObj = new Date(y, m, d, h, minNum, s);
 
-    // Debug detallado
-    console.log(`DEBUG getDateSortValue: Input="${timestampString}" → Parsed="${dateObj.toLocaleString('es-AR')}" → Hour=${hour.toString().padStart(2,'0')}`);
+    // Debug claro
+    console.log(`DEBUG getDateSortValue: Input="${clean}" → Parsed="${dateObj.toLocaleString('es-AR')}" → Hour=${h.toString().padStart(2,'0')}:${minNum.toString().padStart(2,'0')}`);
 
     return isNaN(dateObj.getTime()) ? 0 : dateObj.getTime();
 };
@@ -587,12 +596,23 @@ const renderRecorridoForDate = (dayISO, supervisorName, dailyRecorrido) => {
 
     let html = '';
 
-    // Día del header - usar el primer chequeo parseado
-    let dayCheck = new Date(dayISO).toLocaleDateString('es-AR');
-    if (checks[0].timestamp) {
-        const parsedDate = new Date(getDateSortValue(checks[0].timestamp));
-        if (!isNaN(parsedDate.getTime())) {
-            dayCheck = parsedDate.toLocaleDateString('es-AR');
+    // Día del header - más legible y seguro
+    let dayCheck = new Date(dayISO).toLocaleDateString('es-AR', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric'
+    });
+
+    if (checks[0]?.timestamp) {
+        const parsed = new Date(getDateSortValue(checks[0].timestamp));
+        if (!isNaN(parsed.getTime())) {
+            dayCheck = parsed.toLocaleDateString('es-AR', {
+                weekday: 'long',
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric'
+            });
         }
     }
 
@@ -601,17 +621,19 @@ const renderRecorridoForDate = (dayISO, supervisorName, dailyRecorrido) => {
                  <ul class="list-group list-group-flush recorrido-timeline">`;
 
     checks.forEach((check) => {
-        let timePart = 'N/A';
+        let timePart = '—';
         if (check.timestamp) {
-            const parsedDate = new Date(getDateSortValue(check.timestamp));
-            if (!isNaN(parsedDate.getTime())) {
-                timePart = parsedDate.toLocaleTimeString('es-AR', {
+            const parsed = new Date(getDateSortValue(check.timestamp));
+            if (!isNaN(parsed.getTime())) {
+                timePart = parsed.toLocaleTimeString('es-AR', {
                     hour: '2-digit',
                     minute: '2-digit',
-                    hour12: false  // 24h
+                    hour12: false
                 });
             } else {
-                timePart = check.timestamp.split(' ')[1] || 'N/A'; // fallback directo
+                // Fallback muy simple: tomar la parte después del primer espacio
+                const parts = check.timestamp.trim().split(/\s+/);
+                timePart = parts.length > 1 ? parts[1] : '—';
             }
         }
 
