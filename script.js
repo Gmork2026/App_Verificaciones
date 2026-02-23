@@ -1218,6 +1218,13 @@ function renderCambioTurnoTable(data) {
         return;
     }
 
+    // Orden descendente por timestamp (mas reciente arriba)
+    data.sort((a, b) => {
+        const timeA = getDateSortValue(a.timestamp);
+        const timeB = getDateSortValue(b.timestamp);
+        return timeB - timeA;
+    });
+
     let html = `
         <table class="data-table table-responsive cambio-turno-table">
             <thead>
@@ -1229,6 +1236,7 @@ function renderCambioTurnoTable(data) {
                     <th>Turno Salida</th>
                     <th>Patente</th>
                     <th>Estado Vehículo</th>
+                    <th>Descripción Estado</th>
                     <th>Km</th>
                     <th>Acompañante</th>
                     <th>Legajo Ac.</th>
@@ -1238,10 +1246,6 @@ function renderCambioTurnoTable(data) {
             <tbody>
     `;
 
-    data.sort((a, b) => {
-        return new Date(b.timestamp) - new Date(a.timestamp); // descendente
-    });
-
     data.forEach(item => {
         const estadoLower = item.vehiculo.estado.toLowerCase();
         const estadoClass = 
@@ -1250,7 +1254,7 @@ function renderCambioTurnoTable(data) {
             'text-success';
 
         html += `
-            <tr ${item.hasAlert ? 'class="table-warning"' : ''}>
+            <tr ${item.hasAlert ? 'class="table-warning"': ''}>
                 <td>${item.timestamp || '—'}</td>
                 <td>${item.conductor.nombre || '—'}</td>
                 <td>${item.conductor.legajo || '—'}</td>
@@ -1258,6 +1262,7 @@ function renderCambioTurnoTable(data) {
                 <td>${item.turno.salida || '—'}</td>
                 <td><strong>${item.vehiculo.patente}</strong></td>
                 <td class="${estadoClass}">${item.vehiculo.estado}</td>
+                <td>${item.vehiculo.descripcionEstado}</td>
                 <td>${item.vehiculo.kilometraje}</td>
                 <td>${item.acompanantePrincipal.nombre || '—'}</td>
                 <td>${item.acompanantePrincipal.legajo || '—'}</td>
