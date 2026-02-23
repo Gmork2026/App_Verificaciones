@@ -154,9 +154,9 @@ window.toggleRepetitionDetails = () => {
 // ====================================================================================================
 
 /**
- * Parser ROBUSTO y ESPECÍFICO para timestamps "DD/MM/YYYY HH:MM:SS" (24h sin coma ni AM/PM).
- * Usa Date en local time sin UTC para evitar desfases -3h en Argentina.
- * Incluye validación estricta y debug.
+ * Parser ROBUSTO para timestamps "DD/MM/YYYY HH:MM:SS" (24h sin coma ni AM/PM).
+ * Usa time local para evitar desfases de timezone AR (-3h).
+ * Validación estricta y debug.
  */
 const getDateSortValue = (timestampString) => {
     if (!timestampString || typeof timestampString !== 'string') {
@@ -164,10 +164,10 @@ const getDateSortValue = (timestampString) => {
         return 0;
     }
 
-    // Limpieza: solo espacios simples
+    // Limpieza
     const clean = timestampString.trim().replace(/\s+/g, ' ');
 
-    // Regex preciso para "DD/MM/YYYY HH:MM:SS" o "DD/MM/YYYY, HH:MM:SS"
+    // Regex para "DD/MM/YYYY HH:MM:SS" o "DD/MM/YYYY, HH:MM:SS"
     const regex = /^(\d{2})\/(\d{2})\/(\d{4})\s*,?\s*(\d{1,2}):(\d{2}):?(\d{2})?$/;
     const match = clean.match(regex);
 
@@ -186,15 +186,15 @@ const getDateSortValue = (timestampString) => {
     const s = parseInt(sec, 10);
 
     // Validación estricta
-    if (isNaN(d) || isNaN(m) || isNaN(y) || isNaN(h) || isNaN(minNum) || isNaN(s)) {
-        console.warn(`getDateSortValue: valores NaN en "${clean}"`);
+    if (isNaN(d) || isNaN(m) || isNaN(y) || isNaN(h) || isNaN(minNum) || isNaN(s) || y < 2000 || h > 23 || minNum > 59) {
+        console.warn(`getDateSortValue: valores inválidos en "${clean}" (year=${y}, hour=${h})`);
         return 0;
     }
 
-    // Crear Date en timezone LOCAL (no UTC) → respeta la hora que el usuario ve
+    // Crear Date en LOCAL time (respeta AR -3h sin restar extra)
     const dateObj = new Date(y, m, d, h, minNum, s);
 
-    // Debug claro
+    // Debug
     console.log(`DEBUG getDateSortValue: Input="${clean}" → Parsed="${dateObj.toLocaleString('es-AR')}" → Hour=${h.toString().padStart(2,'0')}:${minNum.toString().padStart(2,'0')}`);
 
     return isNaN(dateObj.getTime()) ? 0 : dateObj.getTime();
@@ -262,9 +262,10 @@ const loadData = async (sheetName) => {
 
         // Ordenamiento DESCENDENTE (Más Reciente a Más Antiguo)
         sheetData.sort((a, b) => {
-            const sortValueA = getDateSortValue(a.timestamp);
-            const sortValueB = getDateSortValue(b.timestamp);
-            return sortValueB - sortValueA;
+        const sortValueA = getDateSortValue(a.timestamp);
+        const sortValueB = getDateSortValue(b.timestamp);
+        console.log(`DEBUG SORT: A="${a.timestamp}" (${sortValueA}), B="${b.timestamp}" (${sortValueB}) → Order=${sortValueB - sortValueA}`);
+        return sortValueB - sortValueA;
         });
 
         // 4. Actualizar UI
@@ -596,23 +597,13 @@ const renderRecorridoForDate = (dayISO, supervisorName, dailyRecorrido) => {
 
     let html = '';
 
-    // Día del header - más legible y seguro
-    let dayCheck = new Date(dayISO).toLocaleDateString('es-AR', {
-        weekday: 'long',
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric'
-    });
+    // Día del header - usar local date
+    let dayCheck = new Date(dayISO).toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
     if (checks[0]?.timestamp) {
         const parsed = new Date(getDateSortValue(checks[0].timestamp));
         if (!isNaN(parsed.getTime())) {
-            dayCheck = parsed.toLocaleDateString('es-AR', {
-                weekday: 'long',
-                day: 'numeric',
-                month: 'long',
-                year: 'numeric'
-            });
+            dayCheck = parsed.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
         }
     }
 
@@ -631,9 +622,7 @@ const renderRecorridoForDate = (dayISO, supervisorName, dailyRecorrido) => {
                     hour12: false
                 });
             } else {
-                // Fallback muy simple: tomar la parte después del primer espacio
-                const parts = check.timestamp.trim().split(/\s+/);
-                timePart = parts.length > 1 ? parts[1] : '—';
+                timePart = check.timestamp.split(' ')[1] || '—';
             }
         }
 
