@@ -154,48 +154,49 @@ window.toggleRepetitionDetails = () => {
 // ====================================================================================================
 
 /**
- * Parser ROBUSTO para timestamps "DD/MM/YYYY HH:MM:SS" (24h sin coma ni AM/PM).
- * Usa time local para evitar desfases de timezone AR (-3h).
- * Validación estricta y debug.
+ * Función auxiliar para obtener un valor numérico (milisegundos) comparable basado en la fecha y hora.
  */
 const getDateSortValue = (timestampString) => {
-    if (!timestampString || typeof timestampString !== 'string') {
-        console.warn('getDateSortValue: input inválido', timestampString);
-        return 0;
+    if (!timestampString) return 0;
+
+    const [datePartWithSpaces, timePartWithSpaces] = timestampString.split(', ');
+
+    let datePart = datePartWithSpaces ? datePartWithSpaces.trim() : null;
+    let timePart = timePartWithSpaces ? timePartWithSpaces.trim() : null;
+
+    if (!datePart || !timePart) {
+        const parts = timestampString.trim().split(' ');
+        if (parts.length >= 2) {
+            timePart = parts.pop();
+            datePart = parts.join(' ');
+        } else {
+            return 0;
+        }
     }
 
-    // Limpieza
-    const clean = timestampString.trim().replace(/\s+/g, ' ');
+    const dateParts = datePart.split('/');
+    if (dateParts.length !== 3) return 0;
 
-    // Regex para "DD/MM/YYYY HH:MM:SS" o "DD/MM/YYYY, HH:MM:SS"
-    const regex = /^(\d{2})\/(\d{2})\/(\d{4})\s*,?\s*(\d{1,2}):(\d{2}):?(\d{2})?$/;
-    const match = clean.match(regex);
+    const day = parseInt(dateParts[0]);
+    const monthIndex = parseInt(dateParts[1]) - 1;
+    const year = parseInt(dateParts[2]);
 
-    if (!match) {
-        console.warn(`getDateSortValue: formato NO reconocido "${clean}"`);
-        return 0;
+    const timeElements = timePart.split(' ');
+    const hms = timeElements[0];
+    const ampm = timeElements.length > 1 ? timeElements[1] : '';
+
+    const [rawHour, minute, second] = hms.split(':').map(n => parseInt(n));
+    if (isNaN(rawHour) || isNaN(minute) || isNaN(second)) return 0;
+
+    let hour = rawHour;
+
+    if (ampm && ampm.toLowerCase() === 'p.m.' && hour !== 12) {
+        hour += 12;
+    } else if (ampm && ampm.toLowerCase() === 'a.m.' && hour === 12) {
+        hour = 0;
     }
 
-    const [, day, month, year, hourStr, min, sec = '00'] = match;
-
-    const d = parseInt(day, 10);
-    const m = parseInt(month, 10) - 1;
-    const y = parseInt(year, 10);
-    let h = parseInt(hourStr, 10);
-    const minNum = parseInt(min, 10);
-    const s = parseInt(sec, 10);
-
-    // Validación estricta
-    if (isNaN(d) || isNaN(m) || isNaN(y) || isNaN(h) || isNaN(minNum) || isNaN(s) || y < 2000 || h > 23 || minNum > 59) {
-        console.warn(`getDateSortValue: valores inválidos en "${clean}" (year=${y}, hour=${h})`);
-        return 0;
-    }
-
-    // Crear Date en LOCAL time (respeta AR -3h sin restar extra)
-    const dateObj = new Date(y, m, d, h, minNum, s);
-
-    // Debug
-    console.log(`DEBUG getDateSortValue: Input="${clean}" → Parsed="${dateObj.toLocaleString('es-AR')}" → Hour=${h.toString().padStart(2,'0')}:${minNum.toString().padStart(2,'0')}`);
+    const dateObj = new Date(year, monthIndex, day, hour, minute, second);
 
     return isNaN(dateObj.getTime()) ? 0 : dateObj.getTime();
 };
@@ -262,10 +263,9 @@ const loadData = async (sheetName) => {
 
         // Ordenamiento DESCENDENTE (Más Reciente a Más Antiguo)
         sheetData.sort((a, b) => {
-        const sortValueA = getDateSortValue(a.timestamp);
-        const sortValueB = getDateSortValue(b.timestamp);
-        console.log(`DEBUG SORT: A="${a.timestamp}" (${sortValueA}), B="${b.timestamp}" (${sortValueB}) → Order=${sortValueB - sortValueA}`);
-        return sortValueB - sortValueA;
+            const sortValueA = getDateSortValue(a.timestamp);
+            const sortValueB = getDateSortValue(b.timestamp);
+            return sortValueB - sortValueA;
         });
 
         // 4. Actualizar UI
@@ -597,36 +597,17 @@ const renderRecorridoForDate = (dayISO, supervisorName, dailyRecorrido) => {
 
     let html = '';
 
-    // Día del header - usar local date
-    let dayCheck = new Date(dayISO).toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-
-    if (checks[0]?.timestamp) {
-        const parsed = new Date(getDateSortValue(checks[0].timestamp));
-        if (!isNaN(parsed.getTime())) {
-            dayCheck = parsed.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-        }
-    }
+    const dayCheck = checks[0].timestamp ? checks[0].timestamp.split(',')[0].trim() : new Date(dayISO).toLocaleDateString();
 
     html += `<div class="card recorrido-day-card">
                  <div class="card-header">Día: <strong>${dayCheck}</strong> (${checks.length} Chequeos)</div>
                  <ul class="list-group list-group-flush recorrido-timeline">`;
 
     checks.forEach((check) => {
-        let timePart = '—';
-        if (check.timestamp) {
-            const parsed = new Date(getDateSortValue(check.timestamp));
-            if (!isNaN(parsed.getTime())) {
-                timePart = parsed.toLocaleTimeString('es-AR', {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    hour12: false
-                });
-            } else {
-                timePart = check.timestamp.split(' ')[1] || '—';
-            }
-        }
 
+        const timePart = check.timestamp ? check.timestamp.split(',')[1].trim() : 'N/A';
         const isAlert = hasAlert(check);
+        // Usamos encodeURIComponent para serializar el objeto JSON de forma segura
         const checkDataString = JSON.stringify(check);
 
         const displayLocation = getDisplayLocation(check, "Recorridos_Consolidados");
