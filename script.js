@@ -907,11 +907,6 @@ window.renderCards = (dataToRender) => {
 
 // Hacemos la función global para que el Event Listener Delegado pueda encontrarla.
 window.showDetailsModal = (item) => {
-    console.log("=== DEBUG showDetailsModal ejecutado ===");
-    console.log("Current sheet:", currentSheet);
-    console.log("Item recibido (raw):", item);
-    console.log("JSON del item:", JSON.stringify(item, null, 2));
-
     // Lógica para determinar el tipo de chequeo basada en la hoja actual o la hoja de origen
     const isRecorridoCheck = currentSheet === "Recorridos_Consolidados";
     const sheetType = isRecorridoCheck ? (item.HojaOrigen || currentSheet) : currentSheet;
@@ -944,12 +939,8 @@ window.showDetailsModal = (item) => {
     // 1. Detalles Generales
     let html = `
         <p><strong>Puesto/Base/Sitio:</strong> ${item.patrullaNombre || 'N/A'}</p>
-        <p><strong>Supervisor:</strong> ${(item.emailSupervisor && typeof item.emailSupervisor === 'string' ? item.emailSupervisor.split('@')[0] : 'N/A')}</p>
+        <p><strong>Supervisor:</strong> ${(item.emailSupervisor && typeof item.emailSupervisor === 'string' ? item.emailSupervisor : 'N/A')}</p>
         <p><strong>Fecha/Hora Chequeo:</strong> ${item.timestamp || 'N/A'}</p>
-        
-        <!-- NUEVO: Mostrar turno general del chequeo (si existe) -->
-        ${item.turno ? `<p><strong>Turno del chequeo:</strong> <span class="fw-bold">${item.turno}</span></p>` : ''}
-        
         ${isRecorridoCheck ? `<p><strong>Origen del Chequeo:</strong> ${item.HojaOrigen ? item.HojaOrigen.replace('Verificacion de ', '').replace('verificacion de ', '') : 'N/A'}</p>` : ''}
         <hr>
     `;
@@ -991,12 +982,14 @@ window.showDetailsModal = (item) => {
         let hasBaseInfo = false;
 
         baseDetailFields.forEach(field => {
-            const value = item[field.key];
-            if (value && value.toString().trim().toUpperCase() !== 'N/A') {
-                const colorClass = field.checkAlert ? getColorClass(value) : '';
-                baseDetailsHtml += `<p class="${colorClass}"><strong>${field.label}:</strong> ${value}</p>`;
-                hasBaseInfo = true;
-            }
+             const value = item[field.key];
+
+             if (value && value.toString().trim().toUpperCase() !== 'N/A') {
+                 const colorClass = field.checkAlert ? getColorClass(value) : '';
+
+                 baseDetailsHtml += `<p class="${colorClass}"><strong>${field.label}:</strong> ${value}</p>`;
+                 hasBaseInfo = true;
+             }
         });
 
         if (hasBaseInfo) {
@@ -1023,21 +1016,20 @@ window.showDetailsModal = (item) => {
 
     html += '<hr>';
 
-    // 4. Listar vigiladores (sección actualizada con los nuevos campos)
+    // 4. Listar vigiladores
     if (item.vigiladores && item.vigiladores.length > 0) {
-        html += `<h4>Vigiladores Chequeados (${item.vigiladores.length}):</h4>`;
-        
+        html += `<h4>Vigiladores Chequeados:</h4>`;
         item.vigiladores.forEach((v, i) => {
-            const isUniformeAlert   = isNegativeValue(v.uniformeCompleto);
-            const isRegAlert        = isNegativeValue(v.regControlado);
+            const isUniformeAlert = isNegativeValue(v.uniformeCompleto);
+            const isRegAlert = isNegativeValue(v.regControlado);
             const isCapacitacionAlert = isNegativeValue(v.capacitacion);
 
             const faltas = [];
-            if (isRegAlert)        faltas.push('Falta Registro');
-            if (isUniformeAlert)   faltas.push('Falta Uniforme');
+            if (isRegAlert) faltas.push('Falta Registro');
+            if (isUniformeAlert) faltas.push('Falta Uniforme');
             if (isCapacitacionAlert) faltas.push('Falta Capacitación');
 
-            const isVigiladorAlert = isRegAlert || isUniformeAlert;
+            const isVigiladorAlert = isRegAlert || isUniformeAlert; // Solo estas dos causan el ícono 🚨
 
             const statusDisplay = isVigiladorAlert
                 ? `<span class="text-danger">🚨 **Falta Grave:** ${faltas.filter(f => f !== 'Falta Capacitación').join(', ')}</span>`
@@ -1045,29 +1037,18 @@ window.showDetailsModal = (item) => {
 
             html += `<div class="vigilador-detail">
                 <h5>Vigilador ${i + 1} (${v.legajo || 'N/A'}) - ${v.nombre || 'N/A'}</h5>
-                
-                <!-- NUEVO: Turno por vigilador (replicado del chequeo) -->
-                ${v.turno ? `<p><strong>Turno:</strong> <span class="fw-bold">${v.turno}</span></p>` : ''}
-                
-                <p><strong>Estado general:</strong> ${statusDisplay}</p>
+                <p><strong>Estado:</strong> ${statusDisplay}</p>
 
                 <p class="${getColorClass(v.regControlado)}"><strong>Registro Controlado / Presentación:</strong> ${v.regControlado || 'N/A'}</p>
                 <p class="${getColorClass(v.uniformeCompleto)}"><strong>Uniforme Completo:</strong> ${v.uniformeCompleto || 'N/A'}</p>
-                <p class="${getColorClass(v.capacitacion)}"><strong>Capacitación Realizada:</strong> ${v.capacitacion || 'N/A'}</p>
-                
-                <!-- NUEVO: ¿Es conductor? con color -->
-                ${v.esConductor ? `
-                    <p class="${getColorClass(v.esConductor)}">
-                        <strong>¿Es conductor?:</strong> ${v.esConductor}
-                        ${v.esConductor.toLowerCase().trim() === 'no' ? ' <span class="text-danger">(sin conductor asignado)</span>' : ''}
-                    </p>
-                ` : ''}
 
-                <p><strong>Observaciones del vigilador:</strong> ${v.observaciones || 'N/A'}</p>
+                <p class="${getColorClass(v.capacitacion)}"><strong>Capacitación Realizada:</strong> ${v.capacitacion || 'N/A'}</p>
+
+                <p><strong>Observaciones:</strong> ${v.observaciones || 'N/A'}</p>
             </div>`;
         });
     } else {
-        html += `<p><em>No se registraron vigiladores para este chequeo.</em></p>`;
+        html += `<p>No se registraron vigiladores para este chequeo.</p>`;
     }
 
     if (modalBody) modalBody.innerHTML = html;
