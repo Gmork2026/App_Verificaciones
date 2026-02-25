@@ -951,7 +951,7 @@ window.showDetailsModal = (item) => {
             <p><strong>Turno Inicio:</strong> ${item.turno.inicio || '—'}</p>
             <p><strong>Turno Salida:</strong> ${item.turno.salida || '—'}</p>
             <p><strong>Patente del Vehículo:</strong> ${item.vehiculo.patente || '—'}</p>
-            <p><strong>Estado del Vehículo:</strong> <span class="${item.hasAlert ? 'text-danger fw-bold' : 'text-success'}">${item.vehiculo.estado || '—'}</span></p>
+            <p><strong>Estado del Vehículo:</strong> <span class="${item.hasAlert ? 'text-warning fw-bold' : 'text-success'}">${item.vehiculo.estado || '—'}</span></p>
             <p><strong>Descripción del Estado:</strong> ${item.vehiculo.descripcionEstado || 'Sin descripción'}</p>
             <p><strong>Kilometraje:</strong> ${item.vehiculo.kilometraje || '—'}</p>
             <hr>
@@ -1269,8 +1269,10 @@ function renderCambioTurnoTable(data) {
     `;
 
     data.forEach((item, index) => {
-        const estadoLower = item.vehiculo.estado.toLowerCase().trim();
-        const estadoClass = estadoLower === 'bueno estado' ? 'text-success' : 'text-danger fw-bold';
+        const estadoLower = item.vehiculo.estado.toLowerCase();
+        const estadoClass = 
+            estadoLower.includes('malo') ? 'text-danger fw-bold' :
+            estadoLower.includes('regular') ? 'text-warning fw-bold' : 'text-success';
 
         const itemDataString = JSON.stringify(item);
 
