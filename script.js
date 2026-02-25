@@ -945,7 +945,7 @@ window.showDetailsModal = (item) => {
     if (currentSheet === "Cambio de Turno") {
         // Calculamos la clase de color aquí mismo en el frontend para asegurar consistencia
         const estadoVehiculoModal = item.vehiculo.estado ? item.vehiculo.estado.toLowerCase().trim() : '';
-        const estadoClassModal = estadoVehiculoModal === 'bueno estado' ? 'text-success' : 'text-danger fw-bold';
+        const estadoClassModal = estadoVehiculoModal === 'Bueno Estado' ? 'text-success' : 'text-danger fw-bold';
 
         let html = `
             <h4>Detalles del Cambio de Turno</h4>
