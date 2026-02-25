@@ -943,6 +943,10 @@ window.showDetailsModal = (item) => {
     // BLOQUE ESPECÍFICO PARA PESTAÑA "Cambio de Turno" (nuevo)
     // ════════════════════════════════════════════════════════════════════════
     if (currentSheet === "Cambio de Turno") {
+        // Calculamos la clase de color aquí mismo en el frontend para asegurar consistencia
+        const estadoVehiculoModal = item.vehiculo.estado ? item.vehiculo.estado.toLowerCase().trim() : '';
+        const estadoClassModal = estadoVehiculoModal === 'bueno estado' ? 'text-success' : 'text-danger fw-bold';
+
         let html = `
             <h4>Detalles del Cambio de Turno</h4>
             <hr>
@@ -951,7 +955,7 @@ window.showDetailsModal = (item) => {
             <p><strong>Turno Inicio:</strong> ${item.turno.inicio || '—'}</p>
             <p><strong>Turno Salida:</strong> ${item.turno.salida || '—'}</p>
             <p><strong>Patente del Vehículo:</strong> ${item.vehiculo.patente || '—'}</p>
-            <p><strong>Estado del Vehículo:</strong> <span class="${item.hasAlert ? 'text-danger fw-bold' : 'text-success'}">${item.vehiculo.estado || '—'}</span></p>
+            <p><strong>Estado del Vehículo:</strong> <span class="${estadoClassModal}">${item.vehiculo.estado || '—'}</span></p>
             <p><strong>Descripción del Estado:</strong> ${item.vehiculo.descripcionEstado || 'Sin descripción'}</p>
             <p><strong>Kilometraje:</strong> ${item.vehiculo.kilometraje || '—'}</p>
             <hr>
