@@ -2,35 +2,38 @@
 // 1. DATA Y CONFIGURACIÓN CRÍTICA
 // ====================================================================================================
 
-// 🛑 ¡PUNTO CRÍTICO! REEMPLAZA ESTA URL CON LA DE TU PROPIO DESPLIEGUE.
 const API_URL = 'https://script.google.com/macros/s/AKfycbzDjq01yI157yqVUnRddgOrZS0Y7i2Vsdq23CD39lqoF6cHTNDiFYerxYRqXo2vE2Uysw/exec';
 
 let currentSheet = "Verificacion de Baterias/Patrullas";
 let sheetData = [];
-let repeatedChecksAnalysis = {}; // Variable global para almacenar el resultado del análisis
-let activeSupervisorEmail = null; // Variable de estado del recorrido
+let repeatedChecksAnalysis = {}; 
+let activeSupervisorEmail = null; 
+
+// NUEVO: Variables Globales para Paginación
+let currentFilteredData = []; 
+let currentPage = 1;
+const itemsPerPage = 30; // 👈 Límite de resultados por página
 
 // Referencias del DOM
 const dataContainer = document.getElementById('dataContainer');
 const searchInput = document.getElementById('searchInput');
 const alertFilter = document.getElementById('alertFilter');
-const dateFilter = document.getElementById('dateFilter'); // NUEVO: Referencia al filtro de fecha
+const dateFilter = document.getElementById('dateFilter'); 
 const countDisplay = document.getElementById('countDisplay');
 const detailsModal = document.getElementById('detailsModal');
 const modalBody = document.getElementById('modalBody');
 const closeModal = document.querySelector('.close-button');
 const tabButtons = document.querySelectorAll('.tab-button');
-
-// Referencias del DOM para la VISIBILIDAD y RECORRIDO (Aseguradas)
 const supervisorSummary = document.getElementById('supervisorSummary');
 const recorridoContainer = document.getElementById('recorridoContainer');
 const recorridoInstructions = document.getElementById('recorridoInstructions');
 const resultsTitle = document.getElementById('resultsTitle');
 const recorridoDateSelector = document.getElementById('recorridoDateSelector');
-const summarySection = document.querySelector('.summary-section'); // La sección principal de supervisores/fecha
-const dataDisplaySection = document.querySelector('.data-display'); // El contenedor de la tabla/tarjetas
-const repetitionAnalysisContainer = document.getElementById('repetitionAnalysisContainer'); // Contenedor del análisis de repeticiones
-const filterBar = document.querySelector('.filter-bar'); // Si usas una clase genérica para la barra de filtros
+const summarySection = document.querySelector('.summary-section'); 
+const dataDisplaySection = document.querySelector('.data-display'); 
+const repetitionAnalysisContainer = document.getElementById('repetitionAnalysisContainer'); 
+const filterBar = document.querySelector('.filter-bar'); 
+
 
 // ====================================================================================================
 // 1.5. DATA Y LÓGICA DE ANÁLISIS DE REPETICIONES
@@ -43,9 +46,7 @@ const analyzeRepeatedChecks = (allRecorridoData) => {
         const checkData = allRecorridoData[emailSupervisor];
 
         Object.keys(checkData).forEach(dayISO => {
-            if (!repeatsByDate[dayISO]) {
-                repeatsByDate[dayISO] = {};
-            }
+            if (!repeatsByDate[dayISO]) repeatsByDate[dayISO] = {};
 
             checkData[dayISO].forEach(check => {
                 const objective = check.patrullaNombre;
@@ -70,9 +71,7 @@ const analyzeRepeatedChecks = (allRecorridoData) => {
             }
         });
 
-        if (Object.keys(dayRepeats).length > 0) {
-            finalRepeats[dayISO] = dayRepeats;
-        }
+        if (Object.keys(dayRepeats).length > 0) finalRepeats[dayISO] = dayRepeats;
     });
 
     return finalRepeats;
@@ -143,7 +142,6 @@ const getDateSortValue = (timestampString) => {
     if (!timestampString) return 0;
 
     const [datePartWithSpaces, timePartWithSpaces] = timestampString.split(', ');
-
     let datePart = datePartWithSpaces ? datePartWithSpaces.trim() : null;
     let timePart = timePartWithSpaces ? timePartWithSpaces.trim() : null;
 
@@ -173,14 +171,10 @@ const getDateSortValue = (timestampString) => {
 
     let hour = rawHour;
 
-    if (ampm && ampm.toLowerCase() === 'p.m.' && hour !== 12) {
-        hour += 12;
-    } else if (ampm && ampm.toLowerCase() === 'a.m.' && hour === 12) {
-        hour = 0;
-    }
+    if (ampm && ampm.toLowerCase() === 'p.m.' && hour !== 12) hour += 12;
+    else if (ampm && ampm.toLowerCase() === 'a.m.' && hour === 12) hour = 0;
 
     const dateObj = new Date(year, monthIndex, day, hour, minute, second);
-
     return isNaN(dateObj.getTime()) ? 0 : dateObj.getTime();
 };
 
@@ -188,8 +182,6 @@ const loadData = async (sheetName) => {
     currentSheet = sheetName;
     const isRecorridoTab = sheetName === "Recorridos_Consolidados";
     const isCambioTurno = sheetName === "Cambio de Turno";
-
-    console.log(`LOAD DATA: Pestaña cargada: ${sheetName}. Es Recorrido? ${isRecorridoTab}`);
 
     if (summarySection) {
         const newDisplay = isRecorridoTab ? 'flex' : 'none';
@@ -213,8 +205,7 @@ const loadData = async (sheetName) => {
     }
     
     if (dataDisplaySection) {
-        const newDisplay = isRecorridoTab ? 'none' : 'block';
-        dataDisplaySection.style.display = newDisplay;
+        dataDisplaySection.style.display = isRecorridoTab ? 'none' : 'block';
     }
 
     if (searchInput) searchInput.style.display = isRecorridoTab ? 'none' : 'block';
@@ -241,25 +232,21 @@ const loadData = async (sheetName) => {
         const response = await fetch(fullUrl);
         const data = await response.json();
 
-        if (data.error) {
-            throw new Error(data.error);
-        }
+        if (data.error) throw new Error(data.error);
 
         sheetData = data;
 
+        // Ordenamiento global de más reciente a más antiguo
         sheetData.sort((a, b) => {
             const sortValueA = getDateSortValue(a.timestamp);
             const sortValueB = getDateSortValue(b.timestamp);
             return sortValueB - sortValueA;
         });
 
-        // 4. Actualizar UI
         if (!isRecorridoTab) {
-            // Evaluamos inactividad solo si NO es cambio de turno
             if (!isCambioTurno) {
                 sheetData = checkInactivity(sheetData);
             }
-            // Ahora TODAS las pestañas normales pasan por el filtro (incluido Cambio de Turno)
             window.filterAndSearch();
 
         } else {
@@ -297,10 +284,7 @@ const checkCombustible = (fraccion) => {
     if (den === 0 || isNaN(num) || isNaN(den)) return { valor: 100, alerta: false };
 
     const valor = (num / den) * 100;
-    return {
-        valor: valor,
-        alerta: valor <= (6/16 * 100)
-    };
+    return { valor: valor, alerta: valor <= (6/16 * 100) };
 };
 
 const isNegative = (value) => {
@@ -342,9 +326,7 @@ const hasAlert = (item) => {
     const checkMovil = sheetToCheck !== "Verificacion de objetivos MAC";
     const isBaseCheck = sheetToCheck === "verificacion de bases";
 
-    if (isBaseCheck && getBasesAlertDetails(item).length > 0) {
-        return true;
-    }
+    if (isBaseCheck && getBasesAlertDetails(item).length > 0) return true;
 
     if (checkMovil) {
         if (item.combustibleFraccion && checkCombustible(item.combustibleFraccion).alerta) return true;
@@ -354,12 +336,9 @@ const hasAlert = (item) => {
 
     if (item.vigiladores && item.vigiladores.length > 0) {
         const vigiladorAlerta = item.vigiladores.some(v =>
-            isNegative(v.uniformeCompleto) ||
-            isNegative(v.regControlado)
+            isNegative(v.uniformeCompleto) || isNegative(v.regControlado)
         );
-        if (vigiladorAlerta) {
-            return true;
-        }
+        if (vigiladorAlerta) return true;
     }
 
     return false;
@@ -384,15 +363,11 @@ const checkInactivity = (data) => {
     return data.map((item) => {
         const key = item.patrullaNombre;
         const lastReport = lastReports[key];
-
         const lastReportDateMilli = lastReport ? lastReport.sortValue : 0;
-
         const hasPassedThreshold = lastReportDateMilli === 0 || (now - lastReportDateMilli) > twentyFourHours;
-
         const isLatestReport = item.timestamp && getDateSortValue(item.timestamp) === lastReport.sortValue;
 
         item.inactividadAlerta = isLatestReport && hasPassedThreshold;
-
         return item;
     });
 };
@@ -407,9 +382,7 @@ const updateSummaryData = (data) => {
             const key = email.trim().toLowerCase();
             const sortValue = getDateSortValue(item.timestamp);
 
-            if (!supervisorCounts[key]) {
-                supervisorCounts[key] = { count: 0, lastCheck: item.timestamp };
-            }
+            if (!supervisorCounts[key]) supervisorCounts[key] = { count: 0, lastCheck: item.timestamp };
             supervisorCounts[key].count++;
 
             if (sortValue > getDateSortValue(supervisorCounts[key].lastCheck)) {
@@ -423,12 +396,8 @@ const updateSummaryData = (data) => {
                 const day = String(dateObj.getDate()).padStart(2, '0');
                 const dayKey = `${year}-${month}-${day}`;
 
-                if (!allRecorridoData[key]) {
-                    allRecorridoData[key] = {};
-                }
-                if (!allRecorridoData[key][dayKey]) {
-                    allRecorridoData[key][dayKey] = [];
-                }
+                if (!allRecorridoData[key]) allRecorridoData[key] = {};
+                if (!allRecorridoData[key][dayKey]) allRecorridoData[key][dayKey] = [];
                 allRecorridoData[key][dayKey].push(item);
             }
         }
@@ -481,15 +450,12 @@ const groupRecorridoByDay = (data) => {
         if (sortValue === 0) return;
 
         const dateObj = new Date(sortValue);
-
         const year = dateObj.getFullYear();
         const month = String(dateObj.getMonth() + 1).padStart(2, '0');
         const day = String(dateObj.getDate()).padStart(2, '0');
         const dayKey = `${year}-${month}-${day}`;
 
-        if (!dailyRecorrido[dayKey]) {
-            dailyRecorrido[dayKey] = [];
-        }
+        if (!dailyRecorrido[dayKey]) dailyRecorrido[dayKey] = [];
         dailyRecorrido[dayKey].push(item);
     });
 
@@ -504,23 +470,19 @@ const groupRecorridoByDay = (data) => {
     return dailyRecorrido;
 };
 
-
 const getDisplayLocation = (check, sheet) => {
     const locationName = check.patrullaNombre || 'Ubicación Desconocida';
     const movilDominio = check.movilDominio || '';
 
     if (sheet === "Recorridos_Consolidados") {
         const sheetSource = check.HojaOrigen || 'N/A';
-
         const typeMap = {
              "Verificacion de Baterias/Patrullas": "B/P",
              "Verificacion de objetivos MAC": "MAC",
              "Verificacion de sitios Aysa": "AYSA",
              "verificacion de bases": "BASE",
         };
-
         const typeDisplay = typeMap[sheetSource] || sheetSource.replace('Verificacion de ', '').replace('verificacion de ', '');
-
         return `${locationName} (${typeDisplay})`;
     }
 
@@ -531,7 +493,6 @@ const renderRecorridoForDate = (dayISO, supervisorName, dailyRecorrido) => {
     if (!recorridoContainer) return;
 
     const checks = dailyRecorrido[dayISO];
-
     const availableDays = Object.keys(dailyRecorrido).sort().reverse();
 
     if (!checks || checks.length === 0) {
@@ -551,7 +512,6 @@ const renderRecorridoForDate = (dayISO, supervisorName, dailyRecorrido) => {
     }
 
     let html = '';
-
     const dayCheck = checks[0].timestamp ? checks[0].timestamp.split(',')[0].trim() : new Date(dayISO).toLocaleDateString();
 
     html += `<div class="card recorrido-day-card">
@@ -559,11 +519,9 @@ const renderRecorridoForDate = (dayISO, supervisorName, dailyRecorrido) => {
                  <ul class="list-group list-group-flush recorrido-timeline">`;
 
     checks.forEach((check) => {
-
         const timePart = check.timestamp ? check.timestamp.split(',')[1].trim() : 'N/A';
         const isAlert = hasAlert(check);
         const checkDataString = JSON.stringify(check);
-
         const displayLocation = getDisplayLocation(check, "Recorridos_Consolidados");
 
         html += `
@@ -585,11 +543,8 @@ const renderRecorridoForDate = (dayISO, supervisorName, dailyRecorrido) => {
     recorridoContainer.innerHTML = html;
 };
 
-
 window.showSupervisorRecorrido = (emailSupervisor) => {
-    if (!recorridoContainer || !recorridoInstructions || !recorridoDateSelector || currentSheet !== "Recorridos_Consolidados") {
-          return; 
-    }
+    if (!recorridoContainer || !recorridoInstructions || !recorridoDateSelector || currentSheet !== "Recorridos_Consolidados") return; 
 
     const allListItems = document.querySelectorAll('.supervisor-list li');
     allListItems.forEach(li => li.classList.remove('active-supervisor'));
@@ -628,7 +583,7 @@ window.showSupervisorRecorrido = (emailSupervisor) => {
 
 
 // ====================================================================================================
-// 5. RENDERIZADO Y BÚSQUEDA (Globales)
+// 5. RENDERIZADO, BÚSQUEDA Y PAGINACIÓN (Globales)
 // ====================================================================================================
 
 window.filterAndSearch = () => {
@@ -636,7 +591,7 @@ window.filterAndSearch = () => {
 
     const searchTerm = searchInput ? searchInput.value.toLowerCase().trim() : '';
     const alertValue = alertFilter ? alertFilter.value : '';
-    const dateValue = dateFilter ? dateFilter.value : ''; // Valor del calendario (YYYY-MM-DD)
+    const dateValue = dateFilter ? dateFilter.value : ''; 
 
     // 1. Filtro de Alertas
     if (alertValue === 'alerts') {
@@ -645,7 +600,6 @@ window.filterAndSearch = () => {
 
     // 2. Filtro por Fecha Exacta
     if (dateValue) {
-        // Convertimos YYYY-MM-DD a DD/MM/YYYY para que coincida con el timestamp del JSON
         const [year, month, day] = dateValue.split('-');
         const formattedDate = `${day}/${month}/${year}`;
         
@@ -668,7 +622,6 @@ window.filterAndSearch = () => {
                 (v.capacitacion && v.capacitacion.toLowerCase().includes(searchTerm))
             );
 
-            // Campos específicos para búsqueda en Cambio de Turno
             const patenteMatch = item.vehiculo && item.vehiculo.patente && item.vehiculo.patente.toLowerCase().includes(searchTerm);
             const conductorMatch = item.conductor && item.conductor.nombre && item.conductor.nombre.toLowerCase().includes(searchTerm);
 
@@ -676,26 +629,89 @@ window.filterAndSearch = () => {
         });
     }
 
-    window.renderData(filteredData);
+    // Guardamos los datos filtrados en la variable global y reiniciamos la página
+    currentFilteredData = filteredData;
+    currentPage = 1; 
+    
+    // Llamamos a la nueva función que solo dibuja 30 resultados
+    window.renderCurrentPage();
+};
+
+window.renderCurrentPage = () => {
+    if (!dataContainer) return;
+
+    // Actualizamos los títulos globales para mostrar la cantidad TOTAL (no solo los 30 de la página)
+    if (countDisplay) countDisplay.textContent = currentFilteredData.length;
+    if (resultsTitle) {
+        resultsTitle.textContent = currentSheet === "Cambio de Turno" 
+            ? `Registros de Cambio de Turno (${currentFilteredData.length})`
+            : `Resultados del Chequeo (${currentFilteredData.length})`;
+    }
+
+    // Calculamos qué parte del array debemos mostrar
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    const paginatedData = currentFilteredData.slice(startIndex, endIndex);
+
+    // Renderizamos según la pestaña o el dispositivo
+    if (currentSheet === "Cambio de Turno") {
+        renderCambioTurnoTable(paginatedData);
+    } else {
+        dataContainer.innerHTML = '';
+        if (window.innerWidth > 900) {
+            window.renderTable(paginatedData);
+        } else {
+            window.renderCards(paginatedData);
+        }
+    }
+
+    // Dibujar los botones de paginación
+    window.renderPagination();
+};
+
+window.renderPagination = () => {
+    const paginationContainer = document.getElementById('paginationControls');
+    if (!paginationContainer) return;
+
+    const totalItems = currentFilteredData.length;
+    const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
+
+    // Ocultar paginación si hay 30 o menos resultados en total
+    if (totalItems <= itemsPerPage) {
+        paginationContainer.innerHTML = ''; 
+        return;
+    }
+
+    let html = `<div class="pagination-wrapper">`;
+    html += `<button class="page-btn" onclick="window.changePage(-1)" ${currentPage === 1 ? 'disabled' : ''}>&laquo; Anterior</button>`;
+    html += `<span class="page-info">Página ${currentPage} de ${totalPages}</span>`;
+    html += `<button class="page-btn" onclick="window.changePage(1)" ${currentPage === totalPages ? 'disabled' : ''}>Siguiente &raquo;</button>`;
+    html += `</div>`;
+    
+    paginationContainer.innerHTML = html;
+};
+
+window.changePage = (direction) => {
+    const totalPages = Math.ceil(currentFilteredData.length / itemsPerPage);
+    currentPage += direction;
+    
+    if (currentPage < 1) currentPage = 1;
+    if (currentPage > totalPages) currentPage = totalPages;
+    
+    window.renderCurrentPage();
+    
+    // Auto-scroll suave para volver al principio de los resultados
+    document.querySelector('.data-display').scrollIntoView({ behavior: 'smooth' });
 };
 
 const getDynamicHeaders = () => {
     let principalHeader = '';
-
     switch (currentSheet) {
-        case "Verificacion de objetivos MAC":
-            principalHeader = 'Objetivo';
-            break;
-        case "Verificacion de sitios Aysa":
-            principalHeader = 'Sitio';
-            break;
-        case "verificacion de bases":
-            principalHeader = 'Base';
-            break;
+        case "Verificacion de objetivos MAC": principalHeader = 'Objetivo'; break;
+        case "Verificacion de sitios Aysa": principalHeader = 'Sitio'; break;
+        case "verificacion de bases": principalHeader = 'Base'; break;
         case "Verificacion de Baterias/Patrullas":
-        default:
-            principalHeader = 'Patrulla/Batería';
-            break;
+        default: principalHeader = 'Patrulla/Batería'; break;
     }
 
     const headers = [
@@ -710,31 +726,6 @@ const getDynamicHeaders = () => {
     ];
 
     return headers.filter(h => h.trim() !== '');
-};
-
-window.renderData = (dataToRender) => {
-    
-    if (currentSheet === "Cambio de Turno") {
-        renderCambioTurnoTable(dataToRender);
-        if (countDisplay) countDisplay.textContent = dataToRender.length;
-        if (resultsTitle) resultsTitle.textContent = `Registros de Cambio de Turno (${dataToRender.length})`;
-        return;
-    }
-
-    if (!dataContainer) {
-          return;
-    }
-
-    dataContainer.innerHTML = '';
-
-    if (countDisplay) countDisplay.textContent = dataToRender.length;
-    if (resultsTitle) resultsTitle.textContent = `Resultados del Chequeo (${dataToRender.length})`;
-
-    if (window.innerWidth > 900) {
-        window.renderTable(dataToRender);
-    } else {
-        window.renderCards(dataToRender);
-    }
 };
 
 window.renderTable = (dataToRender) => {
@@ -758,31 +749,25 @@ window.renderTable = (dataToRender) => {
         const isInactivityAlert = item.inactividadAlerta;
 
         let alertClass = '';
-        if (isInactivityAlert) {
-            alertClass = 'inactivity-alert-row';
-        } else if (isAlert) {
-            alertClass = 'alert-row';
-        }
+        if (isInactivityAlert) alertClass = 'inactivity-alert-row';
+        else if (isAlert) alertClass = 'alert-row';
 
         const statusIcon = isInactivityAlert ? '🛑' : (isAlert ? '🚨' : '✅');
 
         let vigiladoresSummary = 'N/A';
         if (item.vigiladores && item.vigiladores.length > 0) {
-        vigiladoresSummary = item.vigiladores.slice(0, 2).map(v => { 
-            const namePart = (v.nombre && typeof v.nombre === 'string') ? v.nombre.split(' ')[0] : 'Vigilador';
-            const regStatus = (v.regControlado && v.regControlado.length > 0) ? v.regControlado.substring(0,1) : '?';
-            const uniStatus = (v.uniformeCompleto && v.uniformeCompleto.length > 0) ? v.uniformeCompleto.substring(0,1) : '?';
-            return `${namePart} (${uniStatus}/${regStatus})`;
-        }).join('<br>');
+            vigiladoresSummary = item.vigiladores.slice(0, 2).map(v => { 
+                const namePart = (v.nombre && typeof v.nombre === 'string') ? v.nombre.split(' ')[0] : 'Vigilador';
+                const regStatus = (v.regControlado && v.regControlado.length > 0) ? v.regControlado.substring(0,1) : '?';
+                const uniStatus = (v.uniformeCompleto && v.uniformeCompleto.length > 0) ? v.uniformeCompleto.substring(0,1) : '?';
+                return `${namePart} (${uniStatus}/${regStatus})`;
+            }).join('<br>');
         }
 
         const combustibleDisplay = item.combustibleFraccion || 'N/A';
         const combustibleAlertClass = isMovilCheck && !isBaseCheck && item.combustibleFraccion && checkCombustible(item.combustibleFraccion).alerta ? 'text-danger' : '';
-
         const supervisorDisplay = (item.emailSupervisor && typeof item.emailSupervisor === 'string') ? item.emailSupervisor.split('@')[0] : 'N/A';
-
         const showMovilDetails = isMovilCheck && !isBaseCheck;
-
         const itemDataString = JSON.stringify(item);
 
         tableHTML += `
@@ -846,7 +831,6 @@ window.renderCards = (dataToRender) => {
         }
 
         const combustibleDisplay = item.combustibleFraccion || 'N/A';
-
         const itemDataString = JSON.stringify(item);
 
         cardsHTML += `
@@ -875,11 +859,7 @@ window.showDetailsModal = (item) => {
     const isRecorridoCheck = currentSheet === "Recorridos_Consolidados";
     const sheetType = isRecorridoCheck ? (item.HojaOrigen || currentSheet) : currentSheet;
 
-    // ════════════════════════════════════════════════════════════════════════
-    // BLOQUE ESPECÍFICO PARA PESTAÑA "Cambio de Turno" 
-    // ════════════════════════════════════════════════════════════════════════
     if (currentSheet === "Cambio de Turno") {
-        // Validación estricta del color en el frontend
         const estadoVehiculoModal = item.vehiculo.estado ? item.vehiculo.estado.toString().toLowerCase().trim() : '';
         const estadoClassModal = estadoVehiculoModal === 'bueno estado' ? 'text-success' : 'text-danger fw-bold';
 
@@ -904,25 +884,15 @@ window.showDetailsModal = (item) => {
         return; 
     }
 
-    // ════════════════════════════════════════════════════════════════════════
-    // Resto del modal (para otras pestañas)
-    // ════════════════════════════════════════════════════════════════════════
     const isBaseCheck = sheetType === "verificacion de bases";
     const isMovilCheck = sheetType !== "Verificacion de objetivos MAC" && sheetType !== "Verificacion de sitios Aysa" && !isBaseCheck;
-
     let basesFaltas = [];
 
     const getColorClass = (value) => {
         if (!value) return '';
         const lowerValue = value.toString().toLowerCase().trim();
-
-        if (lowerValue === 'no' || lowerValue === 'regular' || lowerValue === 'mala') {
-            return 'text-danger';
-        }
-
-        if (lowerValue === 'si' || lowerValue === 'sí' || lowerValue === 'buena') {
-            return 'text-success';
-        }
+        if (lowerValue === 'no' || lowerValue === 'regular' || lowerValue === 'mala') return 'text-danger';
+        if (lowerValue === 'si' || lowerValue === 'sí' || lowerValue === 'buena') return 'text-success';
         return '';
     };
 
@@ -944,11 +914,8 @@ window.showDetailsModal = (item) => {
         basesFaltas = getBasesAlertDetails(item);
 
         if (basesFaltas.length > 0) {
-            html += `<h4 class="text-danger">🚨 Faltas en la Base:</h4>
-                     <ul>`;
-            basesFaltas.forEach(falta => {
-                html += `<li><strong class="text-danger">${falta}</strong></li>`;
-            });
+            html += `<h4 class="text-danger">🚨 Faltas en la Base:</h4><ul>`;
+            basesFaltas.forEach(falta => { html += `<li><strong class="text-danger">${falta}</strong></li>`; });
             html += `</ul><hr>`;
         } else {
             html += `<p class="text-success">✅ Todos los chequeos básicos de la Base están **OK**.</p><hr>`;
@@ -977,18 +944,14 @@ window.showDetailsModal = (item) => {
 
         baseDetailFields.forEach(field => {
              const value = item[field.key];
-
              if (value && value.toString().trim().toUpperCase() !== 'N/A') {
                  const colorClass = field.checkAlert ? getColorClass(value) : '';
-
                  baseDetailsHtml += `<p class="${colorClass}"><strong>${field.label}:</strong> ${value}</p>`;
                  hasBaseInfo = true;
              }
         });
 
-        if (hasBaseInfo) {
-            html += baseDetailsHtml;
-        }
+        if (hasBaseInfo) html += baseDetailsHtml;
 
     } else if (isMovilCheck) { 
         html += `
@@ -1003,10 +966,7 @@ window.showDetailsModal = (item) => {
         html += `<h4>Información del Puesto:</h4><p>Dominio/Móvil: N/A - Puesto Fijo</p>`;
     }
 
-    if (item.observacionesMovil) {
-        html += `<hr><p><strong>Observaciones Generales:</strong> ${item.observacionesMovil || 'Sin observaciones'}</p>`;
-    }
-
+    if (item.observacionesMovil) html += `<hr><p><strong>Observaciones Generales:</strong> ${item.observacionesMovil || 'Sin observaciones'}</p>`;
     html += '<hr>';
 
     if (item.vigiladores && item.vigiladores.length > 0) {
@@ -1030,12 +990,9 @@ window.showDetailsModal = (item) => {
             html += `<div class="vigilador-detail">
                 <h5>Vigilador ${i + 1} (${v.legajo || 'N/A'}) - ${v.nombre || 'N/A'}</h5>
                 <p><strong>Estado:</strong> ${statusDisplay}</p>
-
                 <p class="${getColorClass(v.regControlado)}"><strong>Registro Controlado / Presentación:</strong> ${v.regControlado || 'N/A'}</p>
                 <p class="${getColorClass(v.uniformeCompleto)}"><strong>Uniforme Completo:</strong> ${v.uniformeCompleto || 'N/A'}</p>
-
                 <p class="${getColorClass(v.capacitacion)}"><strong>Capacitación Realizada:</strong> ${v.capacitacion || 'N/A'}</p>
-
                 <p><strong>Observaciones:</strong> ${v.observaciones || 'N/A'}</p>
             </div>`;
         });
@@ -1047,60 +1004,37 @@ window.showDetailsModal = (item) => {
     if (detailsModal) detailsModal.style.display = 'block';
 };
 
-if (closeModal) {
-    closeModal.onclick = () => { if (detailsModal) detailsModal.style.display = 'none'; };
-};
-
-if (detailsModal) {
-    window.onclick = (event) => {
-        if (event.target == detailsModal) {
-            detailsModal.style.display = 'none';
-        }
-    };
-}
+if (closeModal) closeModal.onclick = () => { if (detailsModal) detailsModal.style.display = 'none'; };
+if (detailsModal) window.onclick = (event) => { if (event.target == detailsModal) detailsModal.style.display = 'none'; };
 
 const setupRecorridoDetailListener = () => {
     if (!recorridoContainer) return;
-
     recorridoContainer.addEventListener('click', (event) => {
         const button = event.target.closest('.button-small');
-
         if (button && button.hasAttribute('data-check')) { 
             event.stopPropagation();
-
-            const checkDataString = button.dataset.check;
-
             try {
-                const itemData = JSON.parse(decodeURIComponent(checkDataString));
+                const itemData = JSON.parse(decodeURIComponent(button.dataset.check));
                 window.showDetailsModal(itemData);
             } catch (e) {
-                console.error("Error al parsear datos del recorrido:", e);
-                alert("No se pudo cargar el detalle del chequeo. Verifique el formato JSON.");
+                console.error("Error al parsear datos:", e);
+                alert("No se pudo cargar el detalle. Verifique el formato JSON.");
             }
         }
     });
 };
 
 const initialize = () => {
-    console.log("APP INIT: Verificando estado inicial de summary-section.");
-    if (summarySection) {
-        summarySection.style.display = 'none'; 
-        console.log(`INIT STATUS: summarySection visibility set to: ${summarySection.style.display}`);
-    } else {
-        console.error("ERROR: No se encontró el elemento .summary-section.");
-    }
-
-    if (repetitionAnalysisContainer) {
-        repetitionAnalysisContainer.style.display = 'none';
-    }
+    if (summarySection) summarySection.style.display = 'none'; 
+    if (repetitionAnalysisContainer) repetitionAnalysisContainer.style.display = 'none';
 
     if (searchInput) searchInput.addEventListener('input', window.filterAndSearch);
     if (alertFilter) alertFilter.addEventListener('change', window.filterAndSearch);
-    if (dateFilter) dateFilter.addEventListener('change', window.filterAndSearch); // <-- ESCUCHA AL CALENDARIO
+    if (dateFilter) dateFilter.addEventListener('change', window.filterAndSearch); 
 
     window.addEventListener('resize', () => {
-        if (sheetData.length > 0 && currentSheet !== "Recorridos_Consolidados") {
-             window.renderData(sheetData);
+        if (currentFilteredData.length > 0 && currentSheet !== "Recorridos_Consolidados") {
+             window.renderCurrentPage();
         }
     });
 
@@ -1115,11 +1049,7 @@ const initialize = () => {
 
     if (recorridoDateSelector) {
         const today = new Date();
-        const year = today.getFullYear();
-        const month = String(today.getMonth() + 1).padStart(2, '0');
-        const day = String(today.getDate()).padStart(2, '0');
-        const todayISO = `${year}-${month}-${day}`;
-
+        const todayISO = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
         recorridoDateSelector.value = todayISO;
 
         recorridoDateSelector.addEventListener('change', (event) => {
@@ -1130,7 +1060,6 @@ const initialize = () => {
             if (activeSupervisor && rawDailyRecorrido) {
                 const dailyRecorrido = JSON.parse(rawDailyRecorrido);
                 const supervisorName = activeSupervisor.includes('@') ? activeSupervisor.split('@')[0] : activeSupervisor;
-
                 renderRecorridoForDate(selectedDate, supervisorName, dailyRecorrido);
             }
         });
@@ -1139,9 +1068,7 @@ const initialize = () => {
     setupRecorridoDetailListener();
 
     const initialTab = document.querySelector(`.tab-button[data-sheet="${currentSheet}"]`);
-    if (initialTab) {
-        initialTab.classList.add('active');
-    }
+    if (initialTab) initialTab.classList.add('active');
 
     loadData(currentSheet);
 };
@@ -1152,15 +1079,9 @@ function renderCambioTurnoTable(data) {
     dataContainer.innerHTML = '';
 
     if (data.length === 0) {
-        dataContainer.innerHTML = '<p class="text-center text-muted p-4">No hay registros de cambio de turno.</p>';
+        dataContainer.innerHTML = '<p class="text-center text-muted p-4">No hay registros para mostrar en esta página.</p>';
         return;
     }
-
-    data.sort((a, b) => {
-        const timeA = getDateSortValue(a.timestamp);
-        const timeB = getDateSortValue(b.timestamp);
-        return timeB - timeA;
-    });
 
     let html = `
         <table class="data-table table-responsive cambio-turno-table">
@@ -1178,10 +1099,8 @@ function renderCambioTurnoTable(data) {
     `;
 
     data.forEach((item, index) => {
-        // Validación estricta del color en la tabla
         const estadoLower = item.vehiculo.estado ? item.vehiculo.estado.toString().toLowerCase().trim() : '';
         const estadoClass = estadoLower === 'bueno estado' ? 'text-success' : 'text-danger fw-bold';
-
         const itemDataString = JSON.stringify(item);
 
         html += `
