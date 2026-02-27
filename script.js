@@ -166,10 +166,13 @@ const getDateSortValue = (timestampString) => {
     const hms = timeElements[0];
     const ampm = timeElements.length > 1 ? timeElements[1] : '';
 
-    const [rawHour, minute, second] = hms.split(':').map(n => parseInt(n, 10));
-    if (isNaN(rawHour) || isNaN(minute) || isNaN(second)) return 0;
+    // SOLUCIÓN: Separamos y verificamos si hay segundos, si no hay, asume "0"
+    const timePartsArray = hms.split(':');
+    let hour = parseInt(timePartsArray[0], 10);
+    const minute = parseInt(timePartsArray[1], 10);
+    const second = timePartsArray.length > 2 ? parseInt(timePartsArray[2], 10) : 0;
 
-    let hour = rawHour;
+    if (isNaN(hour) || isNaN(minute)) return 0;
 
     if (ampm && ampm.toLowerCase() === 'p.m.' && hour !== 12) hour += 12;
     else if (ampm && ampm.toLowerCase() === 'a.m.' && hour === 12) hour = 0;
@@ -348,20 +351,27 @@ const hasAlert = (item) => {
     return false;
 };
 
-// NUEVO: Función Actualizada para considerar Patentes en Inactividad
 const checkInactivity = (data) => {
     if (data.length === 0) return data;
 
     const isCambioTurno = currentSheet === "Cambio de Turno";
     const lastReports = {};
+
+    // NUEVO: Función para limpiar patentes (quita espacios, guiones y pasa a mayúsculas)
+    const cleanKey = (rawKey) => {
+        if (!rawKey || rawKey === '—') return null;
+        return rawKey.toString().replace(/[\s-]/g, '').toUpperCase();
+    };
     
     data.forEach((item) => {
-        // En Cambio de Turno, la clave de inactividad es la Patente. En otras, es la Patrulla/Base.
-        const key = isCambioTurno 
+        // Usamos la llave limpia para agrupar correctamente
+        const rawKeyValue = isCambioTurno 
             ? (item.vehiculo && item.vehiculo.patente ? item.vehiculo.patente : null) 
             : item.patrullaNombre;
+            
+        const key = cleanKey(rawKeyValue);
 
-        if (!key) return; // Saltamos si no hay llave
+        if (!key) return; // Saltamos si no hay llave válida
 
         const sortValue = item.timestamp ? getDateSortValue(item.timestamp) : 0;
 
@@ -374,9 +384,11 @@ const checkInactivity = (data) => {
     const twentyFourHours = 24 * 60 * 60 * 1000;
 
     return data.map((item) => {
-        const key = isCambioTurno 
+        const rawKeyValue = isCambioTurno 
             ? (item.vehiculo && item.vehiculo.patente ? item.vehiculo.patente : null) 
             : item.patrullaNombre;
+            
+        const key = cleanKey(rawKeyValue);
 
         if (!key) {
             item.inactividadAlerta = false;
@@ -388,7 +400,7 @@ const checkInactivity = (data) => {
         const hasPassedThreshold = lastReportDateMilli === 0 || (now - lastReportDateMilli) > twentyFourHours;
         const isLatestReport = item.timestamp && getDateSortValue(item.timestamp) === lastReport.sortValue;
 
-        // Si es el reporte más reciente de esa patente/base y pasó más de 24h, es alerta.
+        // Alerta si es el reporte más reciente de esa patente Y pasaron más de 24h
         item.inactividadAlerta = isLatestReport && hasPassedThreshold;
         
         return item;
