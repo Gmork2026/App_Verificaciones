@@ -9,10 +9,10 @@ let sheetData = [];
 let repeatedChecksAnalysis = {}; 
 let activeSupervisorEmail = null; 
 
-// NUEVO: Variables Globales para Paginación
+// Variables Globales para Paginación
 let currentFilteredData = []; 
 let currentPage = 1;
-const itemsPerPage = 30; // 👈 Límite de resultados por página
+const itemsPerPage = 30; // Límite de resultados por página
 
 // Referencias del DOM
 const dataContainer = document.getElementById('dataContainer');
@@ -158,15 +158,15 @@ const getDateSortValue = (timestampString) => {
     const dateParts = datePart.split('/');
     if (dateParts.length !== 3) return 0;
 
-    const day = parseInt(dateParts[0]);
-    const monthIndex = parseInt(dateParts[1]) - 1;
-    const year = parseInt(dateParts[2]);
+    const day = parseInt(dateParts[0], 10);
+    const monthIndex = parseInt(dateParts[1], 10) - 1;
+    const year = parseInt(dateParts[2], 10);
 
     const timeElements = timePart.split(' ');
     const hms = timeElements[0];
     const ampm = timeElements.length > 1 ? timeElements[1] : '';
 
-    const [rawHour, minute, second] = hms.split(':').map(n => parseInt(n));
+    const [rawHour, minute, second] = hms.split(':').map(n => parseInt(n, 10));
     if (isNaN(rawHour) || isNaN(minute) || isNaN(second)) return 0;
 
     let hour = rawHour;
@@ -194,7 +194,7 @@ const loadData = async (sheetName) => {
 
         if (isCambioTurno) {
             if (searchInput) searchInput.style.display = 'block'; 
-            if (alertFilter) alertFilter.style.display = 'none';   
+            if (alertFilter) alertFilter.style.display = 'block'; // Reactivado para Cambio de Turno
             if (dateFilter) dateFilter.style.display = 'block'; 
             if (filterBar) filterBar.style.display = 'flex';
 
@@ -244,9 +244,8 @@ const loadData = async (sheetName) => {
         });
 
         if (!isRecorridoTab) {
-            if (!isCambioTurno) {
-                sheetData = checkInactivity(sheetData);
-            }
+            // AHORA SE APLICA CHECK INACTIVITY A TODAS LAS PESTAÑAS (INCLUYENDO CAMBIO DE TURNO)
+            sheetData = checkInactivity(sheetData);
             window.filterAndSearch();
 
         } else {
@@ -280,7 +279,7 @@ const checkCombustible = (fraccion) => {
     const parts = fraccion.split('/');
     if (parts.length !== 2) return { valor: 100, alerta: false };
 
-    const [num, den] = parts.map(n => parseInt(n.trim()));
+    const [num, den] = parts.map(n => parseInt(n.trim(), 10));
     if (den === 0 || isNaN(num) || isNaN(den)) return { valor: 100, alerta: false };
 
     const valor = (num / den) * 100;
@@ -323,6 +322,11 @@ const hasAlert = (item) => {
     const isRecorridoCheck = currentSheet === "Recorridos_Consolidados";
     const sheetToCheck = isRecorridoCheck ? (item.HojaOrigen || currentSheet) : currentSheet;
 
+    // NUEVO: Manejo específico de alertas para "Cambio de Turno"
+    if (sheetToCheck === "Cambio de Turno") {
+        return item.hasAlert === true;
+    }
+
     const checkMovil = sheetToCheck !== "Verificacion de objetivos MAC";
     const isBaseCheck = sheetToCheck === "verificacion de bases";
 
@@ -344,12 +348,21 @@ const hasAlert = (item) => {
     return false;
 };
 
+// NUEVO: Función Actualizada para considerar Patentes en Inactividad
 const checkInactivity = (data) => {
     if (data.length === 0) return data;
 
+    const isCambioTurno = currentSheet === "Cambio de Turno";
     const lastReports = {};
+    
     data.forEach((item) => {
-        const key = item.patrullaNombre;
+        // En Cambio de Turno, la clave de inactividad es la Patente. En otras, es la Patrulla/Base.
+        const key = isCambioTurno 
+            ? (item.vehiculo && item.vehiculo.patente ? item.vehiculo.patente : null) 
+            : item.patrullaNombre;
+
+        if (!key) return; // Saltamos si no hay llave
+
         const sortValue = item.timestamp ? getDateSortValue(item.timestamp) : 0;
 
         if (!lastReports[key] || lastReports[key].sortValue < sortValue) {
@@ -361,13 +374,23 @@ const checkInactivity = (data) => {
     const twentyFourHours = 24 * 60 * 60 * 1000;
 
     return data.map((item) => {
-        const key = item.patrullaNombre;
+        const key = isCambioTurno 
+            ? (item.vehiculo && item.vehiculo.patente ? item.vehiculo.patente : null) 
+            : item.patrullaNombre;
+
+        if (!key) {
+            item.inactividadAlerta = false;
+            return item;
+        }
+
         const lastReport = lastReports[key];
         const lastReportDateMilli = lastReport ? lastReport.sortValue : 0;
         const hasPassedThreshold = lastReportDateMilli === 0 || (now - lastReportDateMilli) > twentyFourHours;
         const isLatestReport = item.timestamp && getDateSortValue(item.timestamp) === lastReport.sortValue;
 
+        // Si es el reporte más reciente de esa patente/base y pasó más de 24h, es alerta.
         item.inactividadAlerta = isLatestReport && hasPassedThreshold;
+        
         return item;
     });
 };
@@ -598,20 +621,17 @@ window.filterAndSearch = () => {
         filteredData = filteredData.filter(item => hasAlert(item) || item.inactividadAlerta);
     }
 
-    // 2. Filtro por Fecha Exacta (CORREGIDO PARA CUALQUIER FORMATO)
+    // 2. Filtro por Fecha Exacta
     if (dateValue) {
-        // Convertimos a números para ignorar los ceros a la izquierda (ej. "02" vs "2")
         const [filterYear, filterMonth, filterDay] = dateValue.split('-').map(Number);
         
         filteredData = filteredData.filter(item => {
             if (!item.timestamp || item.timestamp === '—') return false;
             
-            // Extraemos la parte de la fecha limpiando comas o espacios
             const dateStr = item.timestamp.replace(',', ' ').trim().split(' ')[0];
             const parts = dateStr.split('/');
             
             if (parts.length === 3) {
-                // Parseamos a entero (base 10) para comparar matemáticamente
                 const itemDay = parseInt(parts[0], 10);
                 const itemMonth = parseInt(parts[1], 10);
                 const itemYear = parseInt(parts[2], 10);
@@ -654,7 +674,6 @@ window.filterAndSearch = () => {
 window.renderCurrentPage = () => {
     if (!dataContainer) return;
 
-    // Actualizamos los títulos globales para mostrar la cantidad TOTAL (no solo los 30 de la página)
     if (countDisplay) countDisplay.textContent = currentFilteredData.length;
     if (resultsTitle) {
         resultsTitle.textContent = currentSheet === "Cambio de Turno" 
@@ -662,12 +681,10 @@ window.renderCurrentPage = () => {
             : `Resultados del Chequeo (${currentFilteredData.length})`;
     }
 
-    // Calculamos qué parte del array debemos mostrar
     const startIndex = (currentPage - 1) * itemsPerPage;
     const endIndex = startIndex + itemsPerPage;
     const paginatedData = currentFilteredData.slice(startIndex, endIndex);
 
-    // Renderizamos según la pestaña o el dispositivo
     if (currentSheet === "Cambio de Turno") {
         renderCambioTurnoTable(paginatedData);
     } else {
@@ -679,7 +696,6 @@ window.renderCurrentPage = () => {
         }
     }
 
-    // Dibujar los botones de paginación
     window.renderPagination();
 };
 
@@ -690,7 +706,6 @@ window.renderPagination = () => {
     const totalItems = currentFilteredData.length;
     const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
 
-    // Ocultar paginación si hay 30 o menos resultados en total
     if (totalItems <= itemsPerPage) {
         paginationContainer.innerHTML = ''; 
         return;
@@ -713,8 +728,6 @@ window.changePage = (direction) => {
     if (currentPage > totalPages) currentPage = totalPages;
     
     window.renderCurrentPage();
-    
-    // Auto-scroll suave para volver al principio de los resultados
     document.querySelector('.data-display').scrollIntoView({ behavior: 'smooth' });
 };
 
@@ -1117,9 +1130,24 @@ function renderCambioTurnoTable(data) {
         const estadoClass = estadoLower === 'bueno estado' ? 'text-success' : 'text-danger fw-bold';
         const itemDataString = JSON.stringify(item);
 
+        // EVALUACIÓN DE LAS ALERTAS
+        const isAlert = item.hasAlert;
+        const isInactivityAlert = item.inactividadAlerta;
+
+        let rowClass = '';
+        let statusIcon = '✅ '; // Por defecto todo bien
+
+        if (isInactivityAlert) {
+            rowClass = 'inactivity-alert-row'; // Resaltado completo en rojo oscuro (estilo inactividad global)
+            statusIcon = '🛑 ';
+        } else if (isAlert) {
+            rowClass = 'alert-row'; // Resaltado en rojo claro
+            statusIcon = '🚨 ';
+        }
+
         html += `
-            <tr ${item.hasAlert ? 'class="table-warning"' : ''}>
-                <td><strong>${item.vehiculo.patente}</strong></td>
+            <tr class="${rowClass}">
+                <td>${statusIcon}<strong>${item.vehiculo.patente}</strong></td>
                 <td>${item.turno.inicio || '—'}</td>
                 <td>${item.turno.salida || '—'}</td>
                 <td>${item.vehiculo.kilometraje}</td>
