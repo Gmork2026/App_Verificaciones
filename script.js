@@ -14,6 +14,7 @@ let activeSupervisorEmail = null; // Variable de estado del recorrido
 const dataContainer = document.getElementById('dataContainer');
 const searchInput = document.getElementById('searchInput');
 const alertFilter = document.getElementById('alertFilter');
+const dateFilter = document.getElementById('dateFilter'); // NUEVO: Referencia al filtro de fecha
 const countDisplay = document.getElementById('countDisplay');
 const detailsModal = document.getElementById('detailsModal');
 const modalBody = document.getElementById('modalBody');
@@ -33,16 +34,10 @@ const filterBar = document.querySelector('.filter-bar'); // Si usas una clase ge
 
 // ====================================================================================================
 // 1.5. DATA Y LÓGICA DE ANÁLISIS DE REPETICIONES
-// (El código de `analyzeRepeatedChecks`, `renderRepetitionAnalysis` y `window.toggleRepetitionDetails` se mantiene igual)
 // ====================================================================================================
 
-/**
- * Analiza el objeto agrupado por supervisor/día para encontrar objetivos visitados
- * por más de un supervisor el mismo día.
- * @param {object} allRecorridoData - El objeto agrupado por emailSupervisor y día.
- */
 const analyzeRepeatedChecks = (allRecorridoData) => {
-    const repeatsByDate = {}; // { 'YYYY-MM-DD': { 'Objetivo A': [sup1@, sup2@], ... } }
+    const repeatsByDate = {}; 
 
     Object.keys(allRecorridoData).forEach(emailSupervisor => {
         const checkData = allRecorridoData[emailSupervisor];
@@ -52,7 +47,6 @@ const analyzeRepeatedChecks = (allRecorridoData) => {
                 repeatsByDate[dayISO] = {};
             }
 
-            // Agrupamos por el nombre de la ubicación para contar supervisores
             checkData[dayISO].forEach(check => {
                 const objective = check.patrullaNombre;
                 if (!objective) return;
@@ -65,7 +59,6 @@ const analyzeRepeatedChecks = (allRecorridoData) => {
         });
     });
 
-    // Filtramos solo las entradas con más de un supervisor
     const finalRepeats = {};
     Object.keys(repeatsByDate).forEach(dayISO => {
         const dayRepeats = {};
@@ -73,7 +66,6 @@ const analyzeRepeatedChecks = (allRecorridoData) => {
             const supervisors = Array.from(repeatsByDate[dayISO][objective]);
 
             if (supervisors.length > 1) {
-                // Limpiar el email a solo el nombre para el display
                 dayRepeats[objective] = supervisors.map(email => email.split('@')[0]);
             }
         });
@@ -86,9 +78,6 @@ const analyzeRepeatedChecks = (allRecorridoData) => {
     return finalRepeats;
 };
 
-/**
- * Renderiza los resultados del análisis de repeticiones en el DOM.
- */
 const renderRepetitionAnalysis = (analysisData) => {
     const container = repetitionAnalysisContainer;
     const resultsDiv = document.getElementById('repetitionResults');
@@ -107,7 +96,6 @@ const renderRepetitionAnalysis = (analysisData) => {
 
     container.style.display = 'block';
 
-    // Inicialmente oculto
     let detailsHtml = '<div id="repetitionDetails" style="display: none;">';
 
     Object.keys(analysisData).sort().reverse().forEach(dayISO => {
@@ -132,11 +120,9 @@ const renderRepetitionAnalysis = (analysisData) => {
     detailsHtml += '</div>';
     resultsDiv.innerHTML = detailsHtml;
 
-    // Aseguramos que el estado del botón refleje que los detalles están ocultos inicialmente
     if (toggleButton) toggleButton.textContent = 'Ver Detalles';
 };
 
-// Función global para mostrar/ocultar los detalles de repetición
 window.toggleRepetitionDetails = () => {
     const details = document.getElementById('repetitionDetails');
     const button = document.getElementById('toggleRepetitionsBtn');
@@ -153,9 +139,6 @@ window.toggleRepetitionDetails = () => {
 // 2. FUNCIONES DE CARGA Y ORDENAMIENTO
 // ====================================================================================================
 
-/**
- * Función auxiliar para obtener un valor numérico (milisegundos) comparable basado en la fecha y hora.
- */
 const getDateSortValue = (timestampString) => {
     if (!timestampString) return 0;
 
@@ -201,7 +184,6 @@ const getDateSortValue = (timestampString) => {
     return isNaN(dateObj.getTime()) ? 0 : dateObj.getTime();
 };
 
-
 const loadData = async (sheetName) => {
     currentSheet = sheetName;
     const isRecorridoTab = sheetName === "Recorridos_Consolidados";
@@ -209,46 +191,37 @@ const loadData = async (sheetName) => {
 
     console.log(`LOAD DATA: Pestaña cargada: ${sheetName}. Es Recorrido? ${isRecorridoTab}`);
 
-    // 🚨 CONTROL DE VISIBILIDAD CRÍTICO (Ajuste para móvil/desktop)
     if (summarySection) {
         const newDisplay = isRecorridoTab ? 'flex' : 'none';
         summarySection.style.display = newDisplay;
     
         if (isRecorridoTab) {
-            // 🎯 CAMBIO CRÍTICO: Aplicar 'row' para layout de dos columnas en desktop (>900px)
-            // y 'column' para móvil/tablet.
             const flexDir = (window.innerWidth > 900) ? 'row' : 'column';
             summarySection.style.flexDirection = flexDir; 
         }
 
-        // Personalización para pestaña Cambio de Turno
         if (isCambioTurno) {
-            // Ocultar elementos que no aplican en esta pestaña
-            if (searchInput) searchInput.style.display = 'block'; // lo dejamos visible
-            if (alertFilter) alertFilter.style.display = 'none';   // no usamos alertas por ahora
+            if (searchInput) searchInput.style.display = 'block'; 
+            if (alertFilter) alertFilter.style.display = 'none';   
+            if (dateFilter) dateFilter.style.display = 'block'; 
             if (filterBar) filterBar.style.display = 'flex';
 
-            // Mensaje de carga específico
             if (dataContainer) {
                 dataContainer.innerHTML = `<p class="loading-message">Cargando registros de Cambio de Turno...</p>`;
             }
         }
-
-        console.log(`VISIBILITY LOG: summarySection display set to: ${newDisplay}`);
     }
     
     if (dataDisplaySection) {
         const newDisplay = isRecorridoTab ? 'none' : 'block';
         dataDisplaySection.style.display = newDisplay;
-        console.log(`VISIBILITY LOG: dataDisplaySection display set to: ${newDisplay}`);
     }
 
-    // Oculta/Muestra los filtros estándar
     if (searchInput) searchInput.style.display = isRecorridoTab ? 'none' : 'block';
     if (alertFilter) alertFilter.style.display = isRecorridoTab ? 'none' : 'block';
-    if (filterBar) filterBar.style.display = isRecorridoTab ? 'none' : 'flex'; // Asumiendo que filter-bar contiene searchInput/alertFilter
+    if (dateFilter) dateFilter.style.display = isRecorridoTab ? 'none' : 'block'; 
+    if (filterBar) filterBar.style.display = isRecorridoTab ? 'none' : 'flex'; 
 
-    // 1. Limpieza y mensajes de carga
     if (dataContainer) {
         dataContainer.innerHTML = `<p class="loading-message">Cargando datos de **${sheetName}**, por favor espere...</p>`;
     }
@@ -256,10 +229,9 @@ const loadData = async (sheetName) => {
         if (isRecorridoTab) {
             supervisorSummary.innerHTML = '<h4>Supervisores y Cantidad de Chequeos Consolidados:</h4><p>Cargando sumario...</p>';
         } else {
-             // Limpia el contenido de la sección de recorrido si cambiamos a una pestaña normal
              if (recorridoContainer) recorridoContainer.innerHTML = '';
              if (recorridoInstructions) recorridoInstructions.textContent = 'Selecciona un supervisor para ver su recorrido.';
-             if (repetitionAnalysisContainer) repetitionAnalysisContainer.style.display = 'none'; // Ocultar el análisis
+             if (repetitionAnalysisContainer) repetitionAnalysisContainer.style.display = 'none'; 
         }
     }
 
@@ -275,7 +247,6 @@ const loadData = async (sheetName) => {
 
         sheetData = data;
 
-        // Ordenamiento DESCENDENTE (Más Reciente a Más Antiguo)
         sheetData.sort((a, b) => {
             const sortValueA = getDateSortValue(a.timestamp);
             const sortValueB = getDateSortValue(b.timestamp);
@@ -284,26 +255,18 @@ const loadData = async (sheetName) => {
 
         // 4. Actualizar UI
         if (!isRecorridoTab) {
-            sheetData = checkInactivity(sheetData);
+            // Evaluamos inactividad solo si NO es cambio de turno
+            if (!isCambioTurno) {
+                sheetData = checkInactivity(sheetData);
+            }
+            // Ahora TODAS las pestañas normales pasan por el filtro (incluido Cambio de Turno)
             window.filterAndSearch();
 
-            if (isCambioTurno) {
-            // Para esta pestaña no aplicamos checkInactivity ni filterAndSearch estándar
-            // Simplemente renderizamos directamente
-            renderData(sheetData);
-}
-
         } else {
-            // Ejecutar el sumario y obtener los datos agrupados por supervisor y día
             const allRecorridoData = updateSummaryData(sheetData);
-
-            // 🎯 1.B: EJECUTAR EL ANÁLISIS DE REPETICIONES
             repeatedChecksAnalysis = analyzeRepeatedChecks(allRecorridoData);
-
-            // 🎯 1.B: RENDERIZAR LA SECCIÓN DEL ANÁLISIS
             renderRepetitionAnalysis(repeatedChecksAnalysis);
 
-            // Resetea la vista de recorrido al cargar nuevos datos
             if (recorridoInstructions) recorridoInstructions.textContent = 'Selecciona un supervisor para ver su recorrido.';
             if (recorridoContainer) recorridoContainer.innerHTML = '';
             activeSupervisorEmail = null;
@@ -323,7 +286,6 @@ const loadData = async (sheetName) => {
 
 // ====================================================================================================
 // 3. LÓGICA DE NEGOCIO Y ALERTAS
-// (El código de `checkCombustible`, `isNegative`, `getBasesAlertDetails`, `hasAlert` y `checkInactivity` se mantiene igual)
 // ====================================================================================================
 
 const checkCombustible = (fraccion) => {
@@ -335,7 +297,6 @@ const checkCombustible = (fraccion) => {
     if (den === 0 || isNaN(num) || isNaN(den)) return { valor: 100, alerta: false };
 
     const valor = (num / den) * 100;
-    // Se considera alerta si es menor o igual a 6/16 (~37.5%)
     return {
         valor: valor,
         alerta: valor <= (6/16 * 100)
@@ -381,19 +342,16 @@ const hasAlert = (item) => {
     const checkMovil = sheetToCheck !== "Verificacion de objetivos MAC";
     const isBaseCheck = sheetToCheck === "verificacion de bases";
 
-    // Alerta de bases
     if (isBaseCheck && getBasesAlertDetails(item).length > 0) {
         return true;
     }
 
-    // Alerta de Combustible, Higiene o Botiquín (aplica si hay datos de móvil)
     if (checkMovil) {
         if (item.combustibleFraccion && checkCombustible(item.combustibleFraccion).alerta) return true;
         if (isNegative(item.poseeBotiquin)) return true;
         if (isNegative(item.higieneMovil)) return true;
     }
 
-    // Alerta de Vigiladores
     if (item.vigiladores && item.vigiladores.length > 0) {
         const vigiladorAlerta = item.vigiladores.some(v =>
             isNegative(v.uniformeCompleto) ||
@@ -433,21 +391,15 @@ const checkInactivity = (data) => {
 
         const isLatestReport = item.timestamp && getDateSortValue(item.timestamp) === lastReport.sortValue;
 
-        // La alerta de inactividad solo se aplica al reporte más reciente para esa ubicación
         item.inactividadAlerta = isLatestReport && hasPassedThreshold;
 
         return item;
     });
 };
 
-/**
- * Renderiza el sumario de supervisores para la pestaña consolidada.
- * Además, agrupa los datos por supervisor y día y los retorna para el análisis de repeticiones.
- * @returns {object} allRecorridoData - Datos agrupados por emailSupervisor y luego por día (ISO).
- */
 const updateSummaryData = (data) => {
     const supervisorCounts = {};
-    const allRecorridoData = {}; // Nuevo objeto para agrupar por supervisor Y día
+    const allRecorridoData = {}; 
 
     data.forEach(item => {
         const email = item.emailSupervisor;
@@ -460,12 +412,10 @@ const updateSummaryData = (data) => {
             }
             supervisorCounts[key].count++;
 
-            // Mantiene el timestamp más reciente
             if (sortValue > getDateSortValue(supervisorCounts[key].lastCheck)) {
                  supervisorCounts[key].lastCheck = item.timestamp;
             }
 
-            // --- LÓGICA DE AGRUPACIÓN POR DÍA (Para Recorridos y Análisis de Repeticiones) ---
             if (sortValue !== 0) {
                 const dateObj = new Date(sortValue);
                 const year = dateObj.getFullYear();
@@ -481,7 +431,6 @@ const updateSummaryData = (data) => {
                 }
                 allRecorridoData[key][dayKey].push(item);
             }
-            // ---------------------------------------------------------------------------------
         }
     });
 
@@ -522,12 +471,8 @@ const updateSummaryData = (data) => {
 
 // ====================================================================================================
 // 4. LÓGICA DE RECORRIDO Y FILTRO DE FECHA
-// (El código de `groupRecorridoByDay`, `getDisplayLocation`, `renderRecorridoForDate` y `showSupervisorRecorrido` se mantiene igual)
 // ====================================================================================================
 
-/**
- * Agrupa las verificaciones de un supervisor por día y asegura el orden cronológico.
- */
 const groupRecorridoByDay = (data) => {
     const dailyRecorrido = {};
 
@@ -537,7 +482,6 @@ const groupRecorridoByDay = (data) => {
 
         const dateObj = new Date(sortValue);
 
-        // Convertir a formato ISO YYYY-MM-DD para la clave (fácil de comparar con input[type=date])
         const year = dateObj.getFullYear();
         const month = String(dateObj.getMonth() + 1).padStart(2, '0');
         const day = String(dateObj.getDate()).padStart(2, '0');
@@ -549,12 +493,11 @@ const groupRecorridoByDay = (data) => {
         dailyRecorrido[dayKey].push(item);
     });
 
-    // Ordena los chequeos DENTRO de cada día (Ascendente por hora)
     for (const day in dailyRecorrido) {
         dailyRecorrido[day].sort((a, b) => {
             const timeA = getDateSortValue(a.timestamp);
             const timeB = getDateSortValue(b.timestamp);
-            return timeA - timeB; // Ascendente (A - B)
+            return timeA - timeB; 
         });
     }
 
@@ -562,14 +505,10 @@ const groupRecorridoByDay = (data) => {
 };
 
 
-/**
- * Genera el nombre de la ubicación relevante para el timeline.
- */
 const getDisplayLocation = (check, sheet) => {
     const locationName = check.patrullaNombre || 'Ubicación Desconocida';
     const movilDominio = check.movilDominio || '';
 
-    // Lógica para la pestaña CONSOLIDADA (usa HojaOrigen)
     if (sheet === "Recorridos_Consolidados") {
         const sheetSource = check.HojaOrigen || 'N/A';
 
@@ -585,13 +524,9 @@ const getDisplayLocation = (check, sheet) => {
         return `${locationName} (${typeDisplay})`;
     }
 
-    // Lógica para las pestañas individuales
     return `${locationName} - ${movilDominio || 'Puesto Fijo'}`;
 };
 
-/**
- * Función que renderiza el HTML del recorrido para un día específico (Timeline).
- */
 const renderRecorridoForDate = (dayISO, supervisorName, dailyRecorrido) => {
     if (!recorridoContainer) return;
 
@@ -602,8 +537,8 @@ const renderRecorridoForDate = (dayISO, supervisorName, dailyRecorrido) => {
     if (!checks || checks.length === 0) {
         let availableDaysHtml = availableDays.length > 0
             ? `<p><strong>Días con chequeos:</strong> ${availableDays.map(d => {
-                     const dateParts = d.split('-'); // YYYY-MM-DD
-                     return `${dateParts[2]}/${dateParts[1]}`; // DD/MM
+                     const dateParts = d.split('-'); 
+                     return `${dateParts[2]}/${dateParts[1]}`; 
                 }).join(', ')}</p>`
             : `<p>Este supervisor no tiene chequeos registrados.</p>`;
 
@@ -627,7 +562,6 @@ const renderRecorridoForDate = (dayISO, supervisorName, dailyRecorrido) => {
 
         const timePart = check.timestamp ? check.timestamp.split(',')[1].trim() : 'N/A';
         const isAlert = hasAlert(check);
-        // Usamos encodeURIComponent para serializar el objeto JSON de forma segura
         const checkDataString = JSON.stringify(check);
 
         const displayLocation = getDisplayLocation(check, "Recorridos_Consolidados");
@@ -654,10 +588,9 @@ const renderRecorridoForDate = (dayISO, supervisorName, dailyRecorrido) => {
 
 window.showSupervisorRecorrido = (emailSupervisor) => {
     if (!recorridoContainer || !recorridoInstructions || !recorridoDateSelector || currentSheet !== "Recorridos_Consolidados") {
-          return; // No hacer nada si no estamos en la pestaña correcta
+          return; 
     }
 
-    // 1. Marcar el supervisor activo
     const allListItems = document.querySelectorAll('.supervisor-list li');
     allListItems.forEach(li => li.classList.remove('active-supervisor'));
 
@@ -666,7 +599,6 @@ window.showSupervisorRecorrido = (emailSupervisor) => {
 
     activeSupervisorEmail = emailSupervisor;
 
-    // 2. Filtrar y agrupar los datos
     const supervisorData = sheetData.filter(item =>
         item.emailSupervisor && item.emailSupervisor.trim().toLowerCase() === emailSupervisor.trim().toLowerCase()
     );
@@ -681,16 +613,13 @@ window.showSupervisorRecorrido = (emailSupervisor) => {
 
     const dailyRecorrido = groupRecorridoByDay(supervisorData);
 
-    // 3. Determinar y establecer la fecha más reciente
-    const availableDates = Object.keys(dailyRecorrido).sort().reverse(); // YYYY-MM-DD
+    const availableDates = Object.keys(dailyRecorrido).sort().reverse(); 
     const latestDateISO = availableDates[0] || recorridoDateSelector.value;
 
     recorridoDateSelector.value = latestDateISO;
     recorridoDateSelector.dataset.activeSupervisor = emailSupervisor;
-    // Guardamos los datos agrupados en el dataset para accederlos desde el listener de cambio de fecha
     recorridoDateSelector.dataset.dailyRecorrido = JSON.stringify(dailyRecorrido);
 
-    // 4. Renderizar el recorrido
     renderRecorridoForDate(latestDateISO, supervisorName, dailyRecorrido);
 
     recorridoInstructions.innerHTML = `Ruta de Chequeos de: <strong>${supervisorName}</strong>`;
@@ -700,7 +629,6 @@ window.showSupervisorRecorrido = (emailSupervisor) => {
 
 // ====================================================================================================
 // 5. RENDERIZADO Y BÚSQUEDA (Globales)
-// (El código de `filterAndSearch`, `getDynamicHeaders`, `renderData`, `renderTable`, `renderCards` y `showDetailsModal` se mantiene igual)
 // ====================================================================================================
 
 window.filterAndSearch = () => {
@@ -708,28 +636,43 @@ window.filterAndSearch = () => {
 
     const searchTerm = searchInput ? searchInput.value.toLowerCase().trim() : '';
     const alertValue = alertFilter ? alertFilter.value : '';
+    const dateValue = dateFilter ? dateFilter.value : ''; // Valor del calendario (YYYY-MM-DD)
 
+    // 1. Filtro de Alertas
     if (alertValue === 'alerts') {
         filteredData = filteredData.filter(item => hasAlert(item) || item.inactividadAlerta);
     }
 
+    // 2. Filtro por Fecha Exacta
+    if (dateValue) {
+        // Convertimos YYYY-MM-DD a DD/MM/YYYY para que coincida con el timestamp del JSON
+        const [year, month, day] = dateValue.split('-');
+        const formattedDate = `${day}/${month}/${year}`;
+        
+        filteredData = filteredData.filter(item => {
+            return item.timestamp && item.timestamp.includes(formattedDate);
+        });
+    }
+
+    // 3. Filtro de Búsqueda de Texto
     if (searchTerm) {
         filteredData = filteredData.filter(item => {
-
             const supervisorMatch = item.emailSupervisor && item.emailSupervisor.toLowerCase().includes(searchTerm);
             const generalMatch = (item.timestamp && item.timestamp.toLowerCase().includes(searchTerm));
-
             const puestoMatch = item.patrullaNombre && item.patrullaNombre.toLowerCase().includes(searchTerm);
-
             const movilMatch = item.movilDominio && item.movilDominio.toLowerCase().includes(searchTerm);
-
+            
             const vigiladorMatch = item.vigiladores && item.vigiladores.some(v =>
                 (v.nombre && v.nombre.toLowerCase().includes(searchTerm)) ||
                 (v.legajo && v.legajo.includes(searchTerm)) ||
                 (v.capacitacion && v.capacitacion.toLowerCase().includes(searchTerm))
             );
 
-            return generalMatch || puestoMatch || movilMatch || vigiladorMatch || supervisorMatch;
+            // Campos específicos para búsqueda en Cambio de Turno
+            const patenteMatch = item.vehiculo && item.vehiculo.patente && item.vehiculo.patente.toLowerCase().includes(searchTerm);
+            const conductorMatch = item.conductor && item.conductor.nombre && item.conductor.nombre.toLowerCase().includes(searchTerm);
+
+            return generalMatch || puestoMatch || movilMatch || vigiladorMatch || supervisorMatch || patenteMatch || conductorMatch;
         });
     }
 
@@ -761,7 +704,6 @@ const getDynamicHeaders = () => {
         'Móvil/Tipo',
         'Supervisor',
         'Fecha Chequeo',
-        // Oculta Combustible/Km para MAC, AYSA y BASES
         ...((currentSheet === "Verificacion de objetivos MAC" || currentSheet === "verificacion de bases" || currentSheet === "Verificacion de sitios Aysa") ? [''] : ['Combustible', 'Km']),
         'Vigiladores (U/R)',
         'Detalles'
@@ -788,7 +730,6 @@ window.renderData = (dataToRender) => {
     if (countDisplay) countDisplay.textContent = dataToRender.length;
     if (resultsTitle) resultsTitle.textContent = `Resultados del Chequeo (${dataToRender.length})`;
 
-    // Usa el ancho de la ventana para decidir entre tabla y tarjetas (Responsiveness)
     if (window.innerWidth > 900) {
         window.renderTable(dataToRender);
     } else {
@@ -827,7 +768,7 @@ window.renderTable = (dataToRender) => {
 
         let vigiladoresSummary = 'N/A';
         if (item.vigiladores && item.vigiladores.length > 0) {
-        vigiladoresSummary = item.vigiladores.slice(0, 2).map(v => { // Solo los primeros 2
+        vigiladoresSummary = item.vigiladores.slice(0, 2).map(v => { 
             const namePart = (v.nombre && typeof v.nombre === 'string') ? v.nombre.split(' ')[0] : 'Vigilador';
             const regStatus = (v.regControlado && v.regControlado.length > 0) ? v.regControlado.substring(0,1) : '?';
             const uniStatus = (v.uniformeCompleto && v.uniformeCompleto.length > 0) ? v.uniformeCompleto.substring(0,1) : '?';
@@ -842,7 +783,6 @@ window.renderTable = (dataToRender) => {
 
         const showMovilDetails = isMovilCheck && !isBaseCheck;
 
-        // ⚠️ CRÍTICO: Usamos encodeURIComponent en la tabla para asegurar que los datos pasen correctamente al modal
         const itemDataString = JSON.stringify(item);
 
         tableHTML += `
@@ -877,7 +817,6 @@ window.renderCards = (dataToRender) => {
         const isAlert = hasAlert(item);
         const isInactivityAlert = item.inactividadAlerta;
         const isRecorridoCheck = currentSheet === "Recorridos_Consolidados";
-        // Si es Recorrido, revisamos HojaOrigen
         const isBaseCheck = isRecorridoCheck ? (item.HojaOrigen === "verificacion de bases") : (currentSheet === "verificacion de bases");
         const isMovilCheck = isRecorridoCheck ? (item.HojaOrigen !== "Verificacion de objetivos MAC" && item.HojaOrigen !== "Verificacion de sitios Aysa") : (currentSheet !== "Verificacion de objetivos MAC" && currentSheet !== "Verificacion de sitios Aysa");
 
@@ -908,7 +847,6 @@ window.renderCards = (dataToRender) => {
 
         const combustibleDisplay = item.combustibleFraccion || 'N/A';
 
-        // ⚠️ CRÍTICO: Usamos encodeURIComponent en la tarjeta para asegurar que los datos pasen correctamente al modal
         const itemDataString = JSON.stringify(item);
 
         cardsHTML += `
@@ -933,19 +871,17 @@ window.renderCards = (dataToRender) => {
     dataContainer.innerHTML = cardsHTML;
 };
 
-// Hacemos la función global para que el Event Listener Delegado pueda encontrarla.
 window.showDetailsModal = (item) => {
-    // Lógica para determinar el tipo de chequeo basada en la hoja actual o la hoja de origen
     const isRecorridoCheck = currentSheet === "Recorridos_Consolidados";
     const sheetType = isRecorridoCheck ? (item.HojaOrigen || currentSheet) : currentSheet;
 
     // ════════════════════════════════════════════════════════════════════════
-    // BLOQUE ESPECÍFICO PARA PESTAÑA "Cambio de Turno" (nuevo)
+    // BLOQUE ESPECÍFICO PARA PESTAÑA "Cambio de Turno" 
     // ════════════════════════════════════════════════════════════════════════
     if (currentSheet === "Cambio de Turno") {
-        // Calculamos la clase de color aquí mismo en el frontend para asegurar consistencia
-        const estadoVehiculoModal = item.vehiculo.estado ? item.vehiculo.estado.toLowerCase().trim() : '';
-        const estadoClassModal = estadoVehiculoModal === 'Bueno Estado' ? 'text-success' : 'text-danger fw-bold';
+        // Validación estricta del color en el frontend
+        const estadoVehiculoModal = item.vehiculo.estado ? item.vehiculo.estado.toString().toLowerCase().trim() : '';
+        const estadoClassModal = estadoVehiculoModal === 'bueno estado' ? 'text-success' : 'text-danger fw-bold';
 
         let html = `
             <h4>Detalles del Cambio de Turno</h4>
@@ -965,11 +901,11 @@ window.showDetailsModal = (item) => {
 
         if (modalBody) modalBody.innerHTML = html;
         if (detailsModal) detailsModal.style.display = 'block';
-        return; // Salimos aquí para NO ejecutar el resto del modal (vigiladores, bases, etc.)
+        return; 
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    // Resto del modal (para otras pestañas: vigiladores, bases, patrullas, etc.)
+    // Resto del modal (para otras pestañas)
     // ════════════════════════════════════════════════════════════════════════
     const isBaseCheck = sheetType === "verificacion de bases";
     const isMovilCheck = sheetType !== "Verificacion de objetivos MAC" && sheetType !== "Verificacion de sitios Aysa" && !isBaseCheck;
@@ -996,7 +932,6 @@ window.showDetailsModal = (item) => {
         return lowerValue === 'no' || lowerValue === 'regular' || lowerValue === 'mala';
     };
 
-    // 1. Detalles Generales
     let html = `
         <p><strong>Puesto/Base/Sitio:</strong> ${item.patrullaNombre || 'N/A'}</p>
         <p><strong>Supervisor:</strong> ${(item.emailSupervisor && typeof item.emailSupervisor === 'string' ? item.emailSupervisor : 'N/A')}</p>
@@ -1005,7 +940,6 @@ window.showDetailsModal = (item) => {
         <hr>
     `;
 
-    // 2. Detalles Específicos de Móvil/Batería/Patrulla/Base
     if (isBaseCheck) {
         basesFaltas = getBasesAlertDetails(item);
 
@@ -1056,7 +990,7 @@ window.showDetailsModal = (item) => {
             html += baseDetailsHtml;
         }
 
-    } else if (isMovilCheck) { // Baterías/Patrullas
+    } else if (isMovilCheck) { 
         html += `
              <h4>Información del Móvil/Puesto:</h4>
              <p><strong>Dominio/Móvil:</strong> ${item.movilDominio || 'N/A'}</p>
@@ -1065,18 +999,16 @@ window.showDetailsModal = (item) => {
              <p class="${getColorClass(item.higieneMovil)}"><strong>Higiene:</strong> ${item.higieneMovil || 'N/A'}</p>
              <p class="${getColorClass(item.poseeBotiquin)}"><strong>Posee Botiquín:</strong> ${item.poseeBotiquin || 'N/A'}</p>
         `;
-    } else { // Objetivos MAC o Sitios AYSA (Puesto Fijo/Sitio)
+    } else { 
         html += `<h4>Información del Puesto:</h4><p>Dominio/Móvil: N/A - Puesto Fijo</p>`;
     }
 
-    // 3. Observaciones Generales
     if (item.observacionesMovil) {
         html += `<hr><p><strong>Observaciones Generales:</strong> ${item.observacionesMovil || 'Sin observaciones'}</p>`;
     }
 
     html += '<hr>';
 
-    // 4. Listar vigiladores
     if (item.vigiladores && item.vigiladores.length > 0) {
         html += `<h4>Vigiladores Chequeados:</h4>`;
         item.vigiladores.forEach((v, i) => {
@@ -1089,7 +1021,7 @@ window.showDetailsModal = (item) => {
             if (isUniformeAlert) faltas.push('Falta Uniforme');
             if (isCapacitacionAlert) faltas.push('Falta Capacitación');
 
-            const isVigiladorAlert = isRegAlert || isUniformeAlert; // Solo estas dos causan el ícono 🚨
+            const isVigiladorAlert = isRegAlert || isUniformeAlert; 
 
             const statusDisplay = isVigiladorAlert
                 ? `<span class="text-danger">🚨 **Falta Grave:** ${faltas.filter(f => f !== 'Falta Capacitación').join(', ')}</span>`
@@ -1115,7 +1047,6 @@ window.showDetailsModal = (item) => {
     if (detailsModal) detailsModal.style.display = 'block';
 };
 
-// Event listeners para el modal
 if (closeModal) {
     closeModal.onclick = () => { if (detailsModal) detailsModal.style.display = 'none'; };
 };
@@ -1128,33 +1059,19 @@ if (detailsModal) {
     };
 }
 
-
-// ====================================================================================================
-// 6. INICIALIZACIÓN
-// ====================================================================================================
-
-/**
- * Usa delegación de eventos para manejar clics en botones de detalle
- * dentro del contenedor de recorrido (#recorridoContainer).
- */
 const setupRecorridoDetailListener = () => {
     if (!recorridoContainer) return;
 
     recorridoContainer.addEventListener('click', (event) => {
-        // Busca el botón .button-small más cercano al elemento clickeado
         const button = event.target.closest('.button-small');
 
-        if (button && button.hasAttribute('data-check')) { // Verificamos que sea el botón de detalle del recorrido
+        if (button && button.hasAttribute('data-check')) { 
             event.stopPropagation();
 
-            // Obtenemos el string JSON codificado
             const checkDataString = button.dataset.check;
 
             try {
-                // Decodificamos y Parseamos el string JSON a un objeto JavaScript
                 const itemData = JSON.parse(decodeURIComponent(checkDataString));
-
-                // Llamamos a la función showDetailsModal con el objeto completo
                 window.showDetailsModal(itemData);
             } catch (e) {
                 console.error("Error al parsear datos del recorrido:", e);
@@ -1165,29 +1082,23 @@ const setupRecorridoDetailListener = () => {
 };
 
 const initialize = () => {
-    // ⚠️ CRÍTICO: OCULTAR LA SECCIÓN DE RECORRIDO/SUMARIO AL INICIO
-    // Esto evita que se vea un "flash" de contenido irrelevante antes de que loadData decida qué mostrar.
     console.log("APP INIT: Verificando estado inicial de summary-section.");
     if (summarySection) {
-        // 1. Ocultar el contenedor padre (esto oculta a los hijos: análisis, sumario, recorrido)
         summarySection.style.display = 'none'; 
         console.log(`INIT STATUS: summarySection visibility set to: ${summarySection.style.display}`);
     } else {
         console.error("ERROR: No se encontró el elemento .summary-section.");
     }
 
-    // 2. Ocultar el contenedor de Análisis de Repeticiones. 
-    // Aunque el padre lo oculta, mantenemos esta línea para asegurar que si el padre se muestra por error, el análisis (que solo es visible después de cargar el supervisor) permanezca oculto.
     if (repetitionAnalysisContainer) {
         repetitionAnalysisContainer.style.display = 'none';
     }
 
     if (searchInput) searchInput.addEventListener('input', window.filterAndSearch);
     if (alertFilter) alertFilter.addEventListener('change', window.filterAndSearch);
+    if (dateFilter) dateFilter.addEventListener('change', window.filterAndSearch); // <-- ESCUCHA AL CALENDARIO
 
-    // Aseguramos que el redimensionamiento también use la función global
     window.addEventListener('resize', () => {
-        // Solo renderiza la tabla/tarjeta si NO estamos en la pestaña de recorrido
         if (sheetData.length > 0 && currentSheet !== "Recorridos_Consolidados") {
              window.renderData(sheetData);
         }
@@ -1202,7 +1113,6 @@ const initialize = () => {
         });
     });
 
-    // Configurar el selector de fecha y su listener
     if (recorridoDateSelector) {
         const today = new Date();
         const year = today.getFullYear();
@@ -1218,7 +1128,6 @@ const initialize = () => {
             const rawDailyRecorrido = event.target.dataset.dailyRecorrido;
 
             if (activeSupervisor && rawDailyRecorrido) {
-                // Recuperamos los datos agrupados que se guardaron al hacer clic en el supervisor
                 const dailyRecorrido = JSON.parse(rawDailyRecorrido);
                 const supervisorName = activeSupervisor.includes('@') ? activeSupervisor.split('@')[0] : activeSupervisor;
 
@@ -1227,11 +1136,8 @@ const initialize = () => {
         });
     }
 
-    // 🎯 Configurar el listener delegado para los botones "Ver Detalle" del recorrido
     setupRecorridoDetailListener();
 
-
-    // Carga Inicial
     const initialTab = document.querySelector(`.tab-button[data-sheet="${currentSheet}"]`);
     if (initialTab) {
         initialTab.classList.add('active');
@@ -1250,7 +1156,6 @@ function renderCambioTurnoTable(data) {
         return;
     }
 
-    // Orden descendente
     data.sort((a, b) => {
         const timeA = getDateSortValue(a.timestamp);
         const timeB = getDateSortValue(b.timestamp);
@@ -1273,7 +1178,8 @@ function renderCambioTurnoTable(data) {
     `;
 
     data.forEach((item, index) => {
-        const estadoLower = item.vehiculo.estado.toLowerCase().trim();
+        // Validación estricta del color en la tabla
+        const estadoLower = item.vehiculo.estado ? item.vehiculo.estado.toString().toLowerCase().trim() : '';
         const estadoClass = estadoLower === 'bueno estado' ? 'text-success' : 'text-danger fw-bold';
 
         const itemDataString = JSON.stringify(item);
