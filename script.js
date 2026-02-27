@@ -598,13 +598,27 @@ window.filterAndSearch = () => {
         filteredData = filteredData.filter(item => hasAlert(item) || item.inactividadAlerta);
     }
 
-    // 2. Filtro por Fecha Exacta
+    // 2. Filtro por Fecha Exacta (CORREGIDO PARA CUALQUIER FORMATO)
     if (dateValue) {
-        const [year, month, day] = dateValue.split('-');
-        const formattedDate = `${day}/${month}/${year}`;
+        // Convertimos a números para ignorar los ceros a la izquierda (ej. "02" vs "2")
+        const [filterYear, filterMonth, filterDay] = dateValue.split('-').map(Number);
         
         filteredData = filteredData.filter(item => {
-            return item.timestamp && item.timestamp.includes(formattedDate);
+            if (!item.timestamp || item.timestamp === '—') return false;
+            
+            // Extraemos la parte de la fecha limpiando comas o espacios
+            const dateStr = item.timestamp.replace(',', ' ').trim().split(' ')[0];
+            const parts = dateStr.split('/');
+            
+            if (parts.length === 3) {
+                // Parseamos a entero (base 10) para comparar matemáticamente
+                const itemDay = parseInt(parts[0], 10);
+                const itemMonth = parseInt(parts[1], 10);
+                const itemYear = parseInt(parts[2], 10);
+                
+                return itemDay === filterDay && itemMonth === filterMonth && itemYear === filterYear;
+            }
+            return false;
         });
     }
 
