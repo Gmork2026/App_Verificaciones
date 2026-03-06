@@ -14,7 +14,7 @@
     <main>
         <section class="controls">
             <div class="tabs-container">
-                <button class="tab-button active" data-sheet="Verificacion de Baterias/Patrullas">Verificación B/P</button>
+                <button class="tab-button active" data-sheet="Verificacion de Baterias/Patrullas">Verificación de Moviles</button>
                 <button class="tab-button" data-sheet="Cambio de Turno">Cambio de Turno</button>
                 <button class="tab-button" data-sheet="Verificacion de objetivos MAC">Verificación MAC</button>
                 <button class="tab-button" data-sheet="Verificacion de sitios Aysa">Verificación AYSA</button>
@@ -34,8 +34,9 @@
         </section>
 
         <section class="summary-section">
-            <div id="statsFilterContainer" class="analysis-box" style="width: 100%; order: 0; margin-bottom: 20px; background-color: #e0ecff; border: 2px solid #004d99; padding: 15px; border-radius: 10px;">
-                <h4 style="color: #004d99; margin-bottom: 10px;">📊 Estadísticas de Alertas por Rango</h4>
+            <div id="statsFilterContainer" class="analysis-box" style="width: 100%; order: 0; margin-bottom: 20px; background-color: #f4f6f9; border: 2px solid #004d99; padding: 15px; border-radius: 10px;">
+                <h4 style="color: #004d99; margin-bottom: 5px;">📊 Reporte de Productividad por Rango</h4>
+                <p style="font-size: 0.9em; margin-bottom: 10px; color: #555;">Calcula la cantidad total de recorridos/chequeos realizados por los supervisores.</p>
                 <div style="display: flex; gap: 15px; flex-wrap: wrap; align-items: flex-end;">
                     <div>
                         <label style="display: block; font-size: 0.85em; font-weight: bold;">Desde:</label>
@@ -45,10 +46,10 @@
                         <label style="display: block; font-size: 0.85em; font-weight: bold;">Hasta:</label>
                         <input type="date" id="statsDateTo" class="button-small" style="background: white; color: black; border: 1px solid #ccc;">
                     </div>
-                    <button id="btnCalcularStats" class="button-small" style="background-color: #004d99;">Calcular Detecciones</button>
+                    <button id="btnCalcularStats" class="button-small" style="background-color: #004d99;">Calcular Total Recorridos</button>
                 </div>
-                <div id="statsResultArea" style="margin-top: 15px; padding: 10px; background: white; border-radius: 6px; min-height: 40px; font-size: 0.95em;">
-                    <p style="color: #666; margin: 0;">Seleccione un rango de fechas y presione "Calcular".</p>
+                <div id="statsResultArea" style="margin-top: 15px; padding: 15px; background: white; border-radius: 6px; border: 1px solid #dee2e6; min-height: 40px; font-size: 0.95em;">
+                    Esperando selección de fechas...
                 </div>
             </div>
 

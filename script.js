@@ -1179,65 +1179,69 @@ function renderCambioTurnoTable(data) {
 }
 
 // ====================================================================================================
-// 7. LÓGICA DE ESTADÍSTICAS POR RANGO (PEDIDO DE JEFATURA)
+// 7. LÓGICA DE CONTEO DE RECORRIDOS (PRODUCTIVIDAD) - MODIFICADO PARA JEFATURA
 // ====================================================================================================
 
-const handleStatsCalculation = () => {
+const handleProductivityCalculation = () => {
     const fromDate = document.getElementById('statsDateFrom').value;
     const toDate = document.getElementById('statsDateTo').value;
     const resultArea = document.getElementById('statsResultArea');
 
     if (!fromDate || !toDate) {
-        alert("Por favor, seleccione ambas fechas para el reporte.");
+        alert("Por favor, seleccione ambas fechas.");
         return;
     }
 
-    // Convertir fechas a milisegundos para comparación
+    // Convertir fechas a milisegundos (Asegurando el día completo)
     const startMilli = new Date(fromDate + 'T00:00:00').getTime();
     const endMilli = new Date(toDate + 'T23:59:59').getTime();
 
-    // Filtrar los datos cargados en sheetData (Recorridos_Consolidados)
-    const detections = sheetData.filter(item => {
+    // Filtrar todos los registros en el rango (Sin filtrar por alertas)
+    const totalRecords = sheetData.filter(item => {
         const itemMilli = getDateSortValue(item.timestamp);
-        // Verificar si está en rango Y si tiene alguna alerta activa
-        return (itemMilli >= startMilli && itemMilli <= endMilli) && hasAlert(item);
+        return (itemMilli >= startMilli && itemMilli <= endMilli);
     });
 
-    // Agrupar resultados por supervisor para detalle
+    // Agrupar conteo por supervisor
     const supStats = {};
-    detections.forEach(det => {
-        const name = det.emailSupervisor ? det.emailSupervisor.split('@')[0].toLowerCase() : 'desconocido';
+    totalRecords.forEach(rec => {
+        const name = rec.emailSupervisor ? rec.emailSupervisor.split('@')[0].toLowerCase() : 'N/A';
         supStats[name] = (supStats[name] || 0) + 1;
     });
 
-    // Construir el HTML de resultados
-    if (detections.length === 0) {
-        resultArea.innerHTML = `<p class="text-info">No se encontraron detecciones (alertas) en el rango seleccionado.</p>`;
+    if (totalRecords.length === 0) {
+        resultArea.innerHTML = `<p style="color: #dc3545; font-weight: bold; margin: 0;">⚠️ No se encontraron recorridos realizados entre el ${fromDate} y el ${toDate}.</p>`;
         return;
     }
 
+    // Generar tabla de resultados
     let html = `
-        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 5px; margin-bottom: 10px;">
-            <span style="font-weight: bold; font-size: 1.1em;">Total de Detecciones: <span class="text-danger">${detections.length}</span></span>
+        <div style="margin-bottom: 12px;">
+            <span style="font-size: 1.1em; font-weight: bold; color: #004d99;">
+                Total General de Recorridos: ${totalRecords.length}
+            </span>
         </div>
-        <ul style="list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px;">
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px;">
     `;
 
+    // Ordenar por cantidad (mayor a menor)
     Object.entries(supStats).sort((a,b) => b[1] - a[1]).forEach(([sup, count]) => {
         html += `
-            <li style="padding: 5px 10px; background: #f8f9fa; border-radius: 4px; border-left: 3px solid #dc3545;">
-                <strong style="text-transform: capitalize;">${sup}:</strong> ${count}
-            </li>`;
+            <div style="padding: 8px 12px; background: #e9ecef; border-radius: 5px; border-left: 4px solid #004d99;">
+                <div style="font-size: 0.8em; color: #666; text-transform: uppercase;">Supervisor</div>
+                <div style="font-weight: bold; text-transform: capitalize;">${sup}</div>
+                <div style="font-size: 1.2em; color: #004d99; font-weight: 800;">${count} <small style="font-size: 0.6em; font-weight: 400;">reportes</small></div>
+            </div>`;
     });
 
-    html += `</ul>`;
+    html += `</div>`;
     resultArea.innerHTML = html;
 };
 
-// Insertar el listener dentro de la inicialización o como evento delegado
+// Listener para el botón de cálculo
 document.addEventListener('click', (e) => {
     if (e.target && e.target.id === 'btnCalcularStats') {
-        handleStatsCalculation();
+        handleProductivityCalculation();
     }
 });
 
