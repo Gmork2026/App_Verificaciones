@@ -34,6 +34,24 @@
         </section>
 
         <section class="summary-section">
+            <div id="statsFilterContainer" class="analysis-box" style="width: 100%; order: 0; margin-bottom: 20px; background-color: #e0ecff; border: 2px solid #004d99; padding: 15px; border-radius: 10px;">
+                <h4 style="color: #004d99; margin-bottom: 10px;">📊 Estadísticas de Alertas por Rango</h4>
+                <div style="display: flex; gap: 15px; flex-wrap: wrap; align-items: flex-end;">
+                    <div>
+                        <label style="display: block; font-size: 0.85em; font-weight: bold;">Desde:</label>
+                        <input type="date" id="statsDateFrom" class="button-small" style="background: white; color: black; border: 1px solid #ccc;">
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 0.85em; font-weight: bold;">Hasta:</label>
+                        <input type="date" id="statsDateTo" class="button-small" style="background: white; color: black; border: 1px solid #ccc;">
+                    </div>
+                    <button id="btnCalcularStats" class="button-small" style="background-color: #004d99;">Calcular Detecciones</button>
+                </div>
+                <div id="statsResultArea" style="margin-top: 15px; padding: 10px; background: white; border-radius: 6px; min-height: 40px; font-size: 0.95em;">
+                    <p style="color: #666; margin: 0;">Seleccione un rango de fechas y presione "Calcular".</p>
+                </div>
+            </div>
+
             <div id="repetitionAnalysisContainer" class="analysis-box" style="display: none;">
                 <h4>Análisis de Chequeos Duplicados</h4>
                 <p>Se encontraron <span id="repetitionCount">0</span> días con objetivos visitados por múltiples supervisores en la misma fecha.</p>

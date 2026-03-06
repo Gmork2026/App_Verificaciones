@@ -1178,4 +1178,67 @@ function renderCambioTurnoTable(data) {
     dataContainer.innerHTML = html;
 }
 
+// ====================================================================================================
+// 7. LÓGICA DE ESTADÍSTICAS POR RANGO (PEDIDO DE JEFATURA)
+// ====================================================================================================
+
+const handleStatsCalculation = () => {
+    const fromDate = document.getElementById('statsDateFrom').value;
+    const toDate = document.getElementById('statsDateTo').value;
+    const resultArea = document.getElementById('statsResultArea');
+
+    if (!fromDate || !toDate) {
+        alert("Por favor, seleccione ambas fechas para el reporte.");
+        return;
+    }
+
+    // Convertir fechas a milisegundos para comparación
+    const startMilli = new Date(fromDate + 'T00:00:00').getTime();
+    const endMilli = new Date(toDate + 'T23:59:59').getTime();
+
+    // Filtrar los datos cargados en sheetData (Recorridos_Consolidados)
+    const detections = sheetData.filter(item => {
+        const itemMilli = getDateSortValue(item.timestamp);
+        // Verificar si está en rango Y si tiene alguna alerta activa
+        return (itemMilli >= startMilli && itemMilli <= endMilli) && hasAlert(item);
+    });
+
+    // Agrupar resultados por supervisor para detalle
+    const supStats = {};
+    detections.forEach(det => {
+        const name = det.emailSupervisor ? det.emailSupervisor.split('@')[0].toLowerCase() : 'desconocido';
+        supStats[name] = (supStats[name] || 0) + 1;
+    });
+
+    // Construir el HTML de resultados
+    if (detections.length === 0) {
+        resultArea.innerHTML = `<p class="text-info">No se encontraron detecciones (alertas) en el rango seleccionado.</p>`;
+        return;
+    }
+
+    let html = `
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 5px; margin-bottom: 10px;">
+            <span style="font-weight: bold; font-size: 1.1em;">Total de Detecciones: <span class="text-danger">${detections.length}</span></span>
+        </div>
+        <ul style="list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px;">
+    `;
+
+    Object.entries(supStats).sort((a,b) => b[1] - a[1]).forEach(([sup, count]) => {
+        html += `
+            <li style="padding: 5px 10px; background: #f8f9fa; border-radius: 4px; border-left: 3px solid #dc3545;">
+                <strong style="text-transform: capitalize;">${sup}:</strong> ${count}
+            </li>`;
+    });
+
+    html += `</ul>`;
+    resultArea.innerHTML = html;
+};
+
+// Insertar el listener dentro de la inicialización o como evento delegado
+document.addEventListener('click', (e) => {
+    if (e.target && e.target.id === 'btnCalcularStats') {
+        handleStatsCalculation();
+    }
+});
+
 window.onload = initialize;
