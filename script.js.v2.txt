@@ -181,95 +181,6 @@ const getDateSortValue = (timestampString) => {
     return isNaN(dateObj.getTime()) ? 0 : dateObj.getTime();
 };
 
-// ====================================================================================================
-// 2.5. MOTOR DE AUDITORÍA CRUZADA (CAMBIO DE TURNO)
-// ====================================================================================================
-
-const runAuditControls = (data) => {
-    if (currentSheet !== "Cambio de Turno" || data.length === 0) return data;
-
-    const vehicles = {};
-    const THIRTY_MINS_MS = 30 * 60 * 1000;
-    const MAX_KM_JUMP = 1500; // Tolerancia máxima de km por turno (ajustable)
-
-    // Agrupamos por patente para evaluar la historia de cada móvil
-    // Leemos el array al revés (slice().reverse()) para procesar desde el registro más viejo al más nuevo
-    data.slice().reverse().forEach(item => {
-        const patente = item.vehiculo?.patente;
-        if (!patente || patente === '—') return;
-        if (!vehicles[patente]) vehicles[patente] = [];
-        vehicles[patente].push(item);
-    });
-
-    Object.keys(vehicles).forEach(patente => {
-        let expectedNextAction = null;
-        let lastKm = null;
-
-        vehicles[patente].forEach(record => {
-            record.auditAlerts = []; // Iniciamos el array de alertas limpio
-
-            const isInicio = record.turno?.inicio && record.turno.inicio !== '—';
-            const isSalida = record.turno?.salida && record.turno.salida !== '—';
-            
-            // Determinamos qué acción está haciendo el guardia
-            let currentAction = null;
-            let reportedTime = null;
-
-            if (isInicio && !isSalida) { currentAction = 'inicio'; reportedTime = record.turno.inicio; }
-            else if (isSalida && !isInicio) { currentAction = 'salida'; reportedTime = record.turno.salida; }
-            else if (isInicio && isSalida) { currentAction = 'ambos'; } // Legacy data
-
-            // --- REGLA 1: Desfasaje de Tiempo (> 30 min) ---
-            if (currentAction !== 'ambos' && reportedTime) {
-                 let reportedMs = 0;
-                 if (reportedTime.includes('/')) {
-                     reportedMs = getDateSortValue(reportedTime); // Data legacy (viene fecha completa)
-                 } else {
-                     // Data nueva (solo hora), unimos con la fecha del timestamp
-                     const datePart = record.timestamp.split(',')[0].trim();
-                     reportedMs = getDateSortValue(`${datePart} ${reportedTime}`);
-                 }
-                 const formMs = getDateSortValue(record.timestamp);
-
-                 if (formMs > 0 && reportedMs > 0) {
-                     const diffMins = Math.abs(formMs - reportedMs) / 60000;
-                     if (diffMins > 30) {
-                         record.auditAlerts.push(`⏱️ Carga a destiempo: Diferencia de ${Math.round(diffMins)} min entre el suceso reportado y el envío del formulario.`);
-                     }
-                 }
-            }
-
-            // --- REGLA 2: Secuencia Rota (Falta Entrada/Salida) ---
-            if (currentAction === 'inicio' || currentAction === 'salida') {
-                 if (expectedNextAction && currentAction !== expectedNextAction) {
-                     record.auditAlerts.push(`🔄 Secuencia Rota: Se registró un ${currentAction.toUpperCase()} pero el sistema esperaba un ${expectedNextAction.toUpperCase()}.`);
-                 }
-                 expectedNextAction = currentAction === 'inicio' ? 'salida' : 'inicio';
-            }
-
-            // --- REGLA 3: Control de Kilometraje Irreal ---
-            const currentKm = parseInt(record.vehiculo?.kilometraje, 10);
-            if (!isNaN(currentKm)) {
-                 if (lastKm !== null) {
-                     if (currentKm < lastKm) {
-                         record.auditAlerts.push(`📉 Kilometraje Negativo: El móvil bajó de ${lastKm} a ${currentKm} km.`);
-                     } else if ((currentKm - lastKm) > MAX_KM_JUMP) {
-                         record.auditAlerts.push(`📈 Salto Irreal: El kilometraje subió excesivamente (+${currentKm - lastKm} km) desde el turno anterior.`);
-                     }
-                 }
-                 lastKm = currentKm;
-            }
-
-            // Si detectó fraude o error, marcamos la fila como alerta para el Dashboard
-            if (record.auditAlerts.length > 0) {
-                 record.hasAlert = true; 
-            }
-        });
-    });
-
-    return data;
-};
-
 const loadData = async (sheetName) => {
     currentSheet = sheetName;
     const isRecorridoTab = sheetName === "Recorridos_Consolidados";
@@ -338,12 +249,6 @@ const loadData = async (sheetName) => {
         if (!isRecorridoTab) {
             // AHORA SE APLICA CHECK INACTIVITY A TODAS LAS PESTAÑAS (INCLUYENDO CAMBIO DE TURNO)
             sheetData = checkInactivity(sheetData);
-            
-            // [NUEVA INYECCIÓN] Ejecutar Auditoría para Cambio de Turno
-            if (isCambioTurno) {
-                sheetData = runAuditControls(sheetData);
-            }
-
             window.filterAndSearch();
 
         } else {
@@ -793,41 +698,7 @@ window.renderCurrentPage = () => {
     const paginatedData = currentFilteredData.slice(startIndex, endIndex);
 
     if (currentSheet === "Cambio de Turno") {
-        const estadoVehiculoModal = item.vehiculo.estado ? item.vehiculo.estado.toString().toLowerCase().trim() : '';
-        const estadoClassModal = estadoVehiculoModal === 'bueno estado' ? 'text-success' : 'text-danger fw-bold';
-        
-        let alertasHtml = '';
-        if (item.auditAlerts && item.auditAlerts.length > 0) {
-            alertasHtml = `
-                <div style="background-color: #fff3cd; color: #856404; padding: 12px; border-left: 4px solid #ffeeba; border-radius: 4px; margin-bottom: 15px;">
-                    <h5 style="margin-top:0; font-weight: bold;">🚨 Reporte de Auditoría Automática:</h5>
-                    <ul style="margin-bottom:0; padding-left: 20px;">
-                        ${item.auditAlerts.map(alerta => `<li><strong>${alerta}</strong></li>`).join('')}
-                    </ul>
-                </div>
-            `;
-        }
-
-        let html = `
-            <h4>Detalles del Cambio de Turno</h4>
-            <hr>
-            ${alertasHtml}
-            <p><strong>Fecha/Hora de Recepción (Sistema):</strong> ${item.timestamp || '—'}</p>
-            <p><strong>Conductor:</strong> ${item.conductor.nombre || '—'} (${item.conductor.legajo || '—'})</p>
-            <p><strong>Turno Inicio:</strong> ${item.turno.inicio || '—'}</p>
-            <p><strong>Turno Salida:</strong> ${item.turno.salida || '—'}</p>
-            <p><strong>Patente del Vehículo:</strong> ${item.vehiculo.patente || '—'}</p>
-            <p><strong>Estado del Vehículo:</strong> <span class="${estadoClassModal}">${item.vehiculo.estado || '—'}</span></p>
-            <p><strong>Descripción del Estado:</strong> ${item.vehiculo.descripcionEstado || 'Sin descripción'}</p>
-            <p><strong>Kilometraje:</strong> ${item.vehiculo.kilometraje || '—'}</p>
-            <hr>
-            <p><strong>Acompañante Principal:</strong> ${item.acompanantePrincipal.nombre || '—'} (${item.acompanantePrincipal.legajo || '—'})</p>
-            <p><strong>Acompañante Opcional:</strong> ${item.acompananteOpcional.nombre || '—'} (${item.acompananteOpcional.legajo || '—'})</p>
-        `;
-
-        if (modalBody) modalBody.innerHTML = html;
-        if (detailsModal) detailsModal.style.display = 'block';
-        return; 
+        renderCambioTurnoTable(paginatedData);
     } else {
         dataContainer.innerHTML = '';
         if (window.innerWidth > 900) {
@@ -1245,6 +1116,7 @@ function renderCambioTurnoTable(data) {
     if (!dataContainer) return;
 
     dataContainer.innerHTML = '';
+
     if (data.length === 0) {
         dataContainer.innerHTML = '<p class="text-center text-muted p-4">No hay registros para mostrar en esta página.</p>';
         return;
@@ -1255,47 +1127,43 @@ function renderCambioTurnoTable(data) {
             <thead>
                 <tr>
                     <th>Patente</th>
-                    <th>Tipo de Registro</th>
+                    <th>Turno Inicio</th>
+                    <th>Turno Salida</th>
                     <th>Km</th>
                     <th>Estado del Vehiculo</th>
-                    <th>Auditoría</th>
                     <th>Detalles</th>
                 </tr>
             </thead>
             <tbody>
     `;
 
-    data.forEach((item) => {
+    data.forEach((item, index) => {
         const estadoLower = item.vehiculo.estado ? item.vehiculo.estado.toString().toLowerCase().trim() : '';
         const estadoClass = estadoLower === 'bueno estado' ? 'text-success' : 'text-danger fw-bold';
         const itemDataString = JSON.stringify(item);
 
+        // EVALUACIÓN DE LAS ALERTAS
         const isAlert = item.hasAlert;
         const isInactivityAlert = item.inactividadAlerta;
-        let rowClass = isInactivityAlert ? 'inactivity-alert-row' : (isAlert ? 'alert-row' : '');
-        let statusIcon = isInactivityAlert ? '🛑 ' : (isAlert ? '🚨 ' : '✅ ');
 
-        // Visualización inteligente: Muestra si es ingreso o salida automáticamente
-        const isInicio = item.turno.inicio && item.turno.inicio !== '—';
-        const tiempoDisplay = isInicio 
-            ? `<span style="color:#004d99; font-weight:bold;">🟢 Ingreso:</span> ${item.turno.inicio}` 
-            : `<span style="color:#dc3545; font-weight:bold;">🔴 Salida:</span> ${item.turno.salida}`;
+        let rowClass = '';
+        let statusIcon = '✅ '; // Por defecto todo bien
 
-        // Insignia de Auditoría Automática
-        let auditBadge = '<span style="padding: 4px 8px; border-radius: 4px; color: white; background: #28a745; font-size: 0.85em;">En Regla</span>';
-        if (item.auditAlerts && item.auditAlerts.length > 0) {
-            auditBadge = `<span style="padding: 4px 8px; border-radius: 4px; color: white; background: #dc3545; font-size: 0.85em; cursor: help;" title="${item.auditAlerts.join(' | ')}">
-                ⚠️ ${item.auditAlerts.length} Observaciones
-            </span>`;
+        if (isInactivityAlert) {
+            rowClass = 'inactivity-alert-row'; // Resaltado completo en rojo oscuro (estilo inactividad global)
+            statusIcon = '🛑 ';
+        } else if (isAlert) {
+            rowClass = 'alert-row'; // Resaltado en rojo claro
+            statusIcon = '🚨 ';
         }
 
         html += `
             <tr class="${rowClass}">
                 <td>${statusIcon}<strong>${item.vehiculo.patente}</strong></td>
-                <td>${tiempoDisplay}</td>
+                <td>${item.turno.inicio || '—'}</td>
+                <td>${item.turno.salida || '—'}</td>
                 <td>${item.vehiculo.kilometraje}</td>
                 <td class="${estadoClass}">${item.vehiculo.estado}</td>
-                <td>${auditBadge}</td>
                 <td>
                     <button class="button-small" 
                         onclick="window.showDetailsModal(JSON.parse(decodeURIComponent('${encodeURIComponent(itemDataString)}')))">

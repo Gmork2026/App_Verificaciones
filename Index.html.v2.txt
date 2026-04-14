@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard | Control de Flota y Personal</title>
+    <link rel="stylesheet" href="styles.css"> 
+</head>
+<body>
+    <header>
+        <h1>Control de Flota y Personal | MAC Seguridad</h1>
+    </header>
+
+    <main>
+        <section class="controls">
+            <div class="tabs-container">
+                <button class="tab-button active" data-sheet="Verificacion de Baterias/Patrullas">Verificación de Moviles</button>
+                <button class="tab-button" data-sheet="Cambio de Turno">Cambio de Turno</button>
+                <button class="tab-button" data-sheet="Verificacion de objetivos MAC">Verificación MAC</button>
+                <button class="tab-button" data-sheet="Verificacion de sitios Aysa">Verificación AYSA</button>
+                <button class="tab-button" data-sheet="verificacion de bases">Verificación BASES</button>
+                <button class="tab-button" data-sheet="Recorridos_Consolidados">Recorridos Supervisores</button> 
+            </div>
+            
+            <div class="filter-bar">
+                <input type="date" id="dateFilter" title="Filtrar por fecha exacta">
+                
+                <input type="text" id="searchInput" placeholder="Buscar por Puesto, Dominio, o Vigilador...">
+                <select id="alertFilter">
+                    <option value="all">Mostrar Todos</option>
+                    <option value="alerts">🚨 Mostrar Solo Alertas</option>
+                </select>
+            </div>
+        </section>
+
+        <section class="summary-section">
+            <div id="statsFilterContainer" class="analysis-box" style="width: 100%; order: 0; margin-bottom: 20px; background-color: #f4f6f9; border: 2px solid #004d99; padding: 15px; border-radius: 10px;">
+                <h4 style="color: #004d99; margin-bottom: 5px;">📊 Reporte de Productividad por Rango</h4>
+                <p style="font-size: 0.9em; margin-bottom: 10px; color: #555;">Calcula la cantidad total de recorridos/chequeos realizados por los supervisores.</p>
+                <div style="display: flex; gap: 15px; flex-wrap: wrap; align-items: flex-end;">
+                    <div>
+                        <label style="display: block; font-size: 0.85em; font-weight: bold;">Desde:</label>
+                        <input type="date" id="statsDateFrom" class="button-small" style="background: white; color: black; border: 1px solid #ccc;">
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 0.85em; font-weight: bold;">Hasta:</label>
+                        <input type="date" id="statsDateTo" class="button-small" style="background: white; color: black; border: 1px solid #ccc;">
+                    </div>
+                    <button id="btnCalcularStats" class="button-small" style="background-color: #004d99;">Calcular Total Recorridos</button>
+                </div>
+                <div id="statsResultArea" style="margin-top: 15px; padding: 15px; background: white; border-radius: 6px; border: 1px solid #dee2e6; min-height: 40px; font-size: 0.95em;">
+                    Esperando selección de fechas...
+                </div>
+            </div>
+
+            <div id="repetitionAnalysisContainer" class="analysis-box" style="display: none;">
+                <h4>Análisis de Chequeos Duplicados</h4>
+                <p>Se encontraron <span id="repetitionCount">0</span> días con objetivos visitados por múltiples supervisores en la misma fecha.</p>
+                <button id="toggleRepetitionsBtn" class="button-small" onclick="window.toggleRepetitionDetails()">Ver Detalles</button>
+                <div id="repetitionResults">
+                    </div>
+            </div>
+            <div id="supervisorSummary">
+                </div>
+
+            <div class="recorrido-details-container"> 
+                <div class="recorrido-controls">
+                    <div id="recorridoInstructions">
+                        </div>
+                    <input type="date" id="recorridoDateSelector" title="Seleccionar fecha del recorrido">
+                </div>
+        
+                <div id="recorridoContainer">
+                    </div>
+            </div>
+        </section>
+
+        <section class="data-display">
+            <h2 id="resultsTitle">Resultados del Chequeo (<span id="countDisplay">0</span>)</h2>
+            <div id="dataContainer" class="responsive-data">
+            </div>
+            <div id="paginationControls" class="pagination-container"></div>
+        </section>
+
+        <div id="detailsModal" class="modal">
+            <div class="modal-content">
+                <span class="close-button">&times;</span>
+                <h3>Detalles del Chequeo</h3>
+                <div id="modalBody"></div>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <p>&copy; 2025 MacSeguridad Control.</p>
+    </footer>
+
+    <script src="script.js"></script> 
+</body>
+</html>
