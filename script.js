@@ -793,41 +793,7 @@ window.renderCurrentPage = () => {
     const paginatedData = currentFilteredData.slice(startIndex, endIndex);
 
     if (currentSheet === "Cambio de Turno") {
-        const estadoVehiculoModal = item.vehiculo.estado ? item.vehiculo.estado.toString().toLowerCase().trim() : '';
-        const estadoClassModal = estadoVehiculoModal === 'bueno estado' ? 'text-success' : 'text-danger fw-bold';
-        
-        let alertasHtml = '';
-        if (item.auditAlerts && item.auditAlerts.length > 0) {
-            alertasHtml = `
-                <div style="background-color: #fff3cd; color: #856404; padding: 12px; border-left: 4px solid #ffeeba; border-radius: 4px; margin-bottom: 15px;">
-                    <h5 style="margin-top:0; font-weight: bold;">🚨 Reporte de Auditoría Automática:</h5>
-                    <ul style="margin-bottom:0; padding-left: 20px;">
-                        ${item.auditAlerts.map(alerta => `<li><strong>${alerta}</strong></li>`).join('')}
-                    </ul>
-                </div>
-            `;
-        }
-
-        let html = `
-            <h4>Detalles del Cambio de Turno</h4>
-            <hr>
-            ${alertasHtml}
-            <p><strong>Fecha/Hora de Recepción (Sistema):</strong> ${item.timestamp || '—'}</p>
-            <p><strong>Conductor:</strong> ${item.conductor.nombre || '—'} (${item.conductor.legajo || '—'})</p>
-            <p><strong>Turno Inicio:</strong> ${item.turno.inicio || '—'}</p>
-            <p><strong>Turno Salida:</strong> ${item.turno.salida || '—'}</p>
-            <p><strong>Patente del Vehículo:</strong> ${item.vehiculo.patente || '—'}</p>
-            <p><strong>Estado del Vehículo:</strong> <span class="${estadoClassModal}">${item.vehiculo.estado || '—'}</span></p>
-            <p><strong>Descripción del Estado:</strong> ${item.vehiculo.descripcionEstado || 'Sin descripción'}</p>
-            <p><strong>Kilometraje:</strong> ${item.vehiculo.kilometraje || '—'}</p>
-            <hr>
-            <p><strong>Acompañante Principal:</strong> ${item.acompanantePrincipal.nombre || '—'} (${item.acompanantePrincipal.legajo || '—'})</p>
-            <p><strong>Acompañante Opcional:</strong> ${item.acompananteOpcional.nombre || '—'} (${item.acompananteOpcional.legajo || '—'})</p>
-        `;
-
-        if (modalBody) modalBody.innerHTML = html;
-        if (detailsModal) detailsModal.style.display = 'block';
-        return; 
+        renderCambioTurnoTable(paginatedData); // <-- Esto es todo lo que necesita esta parte
     } else {
         dataContainer.innerHTML = '';
         if (window.innerWidth > 900) {
@@ -1027,24 +993,38 @@ window.showDetailsModal = (item) => {
     const isRecorridoCheck = currentSheet === "Recorridos_Consolidados";
     const sheetType = isRecorridoCheck ? (item.HojaOrigen || currentSheet) : currentSheet;
 
+    // --- NUEVA LÓGICA DEL MODAL PARA CAMBIO DE TURNO (CON AUDITORÍA) ---
     if (currentSheet === "Cambio de Turno") {
-        const estadoVehiculoModal = item.vehiculo.estado ? item.vehiculo.estado.toString().toLowerCase().trim() : '';
-        const estadoClassModal = estadoVehiculoModal === 'bueno estado' ? 'text-success' : 'text-danger fw-bold';
+        const estadoVehiculoModal = item.vehiculo?.estado ? item.vehiculo.estado.toString().toLowerCase().trim() : '';
+        const estadoClassModal = estadoVehiculoModal.includes('bueno estado') ? 'text-success' : 'text-danger fw-bold';
+        
+        let alertasHtml = '';
+        if (item.auditAlerts && item.auditAlerts.length > 0) {
+            alertasHtml = `
+                <div style="background-color: #fff3cd; color: #856404; padding: 12px; border-left: 4px solid #ffeeba; border-radius: 4px; margin-bottom: 15px;">
+                    <h5 style="margin-top:0; font-weight: bold;">🚨 Reporte de Auditoría Automática:</h5>
+                    <ul style="margin-bottom:0; padding-left: 20px;">
+                        ${item.auditAlerts.map(alerta => `<li><strong>${alerta}</strong></li>`).join('')}
+                    </ul>
+                </div>
+            `;
+        }
 
         let html = `
             <h4>Detalles del Cambio de Turno</h4>
             <hr>
-            <p><strong>Fecha/Hora del Registro:</strong> ${item.timestamp || '—'}</p>
-            <p><strong>Conductor:</strong> ${item.conductor.nombre || '—'} (${item.conductor.legajo || '—'})</p>
-            <p><strong>Turno Inicio:</strong> ${item.turno.inicio || '—'}</p>
-            <p><strong>Turno Salida:</strong> ${item.turno.salida || '—'}</p>
-            <p><strong>Patente del Vehículo:</strong> ${item.vehiculo.patente || '—'}</p>
-            <p><strong>Estado del Vehículo:</strong> <span class="${estadoClassModal}">${item.vehiculo.estado || '—'}</span></p>
-            <p><strong>Descripción del Estado:</strong> ${item.vehiculo.descripcionEstado || 'Sin descripción'}</p>
-            <p><strong>Kilometraje:</strong> ${item.vehiculo.kilometraje || '—'}</p>
+            ${alertasHtml}
+            <p><strong>Fecha/Hora de Recepción (Sistema):</strong> ${item.timestamp || '—'}</p>
+            <p><strong>Conductor:</strong> ${item.conductor?.nombre || '—'} (${item.conductor?.legajo || '—'})</p>
+            <p><strong>Turno Inicio:</strong> ${item.turno?.inicio || '—'}</p>
+            <p><strong>Turno Salida:</strong> ${item.turno?.salida || '—'}</p>
+            <p><strong>Patente del Vehículo:</strong> ${item.vehiculo?.patente || '—'}</p>
+            <p><strong>Estado del Vehículo:</strong> <span class="${estadoClassModal}">${item.vehiculo?.estado || '—'}</span></p>
+            <p><strong>Descripción del Estado:</strong> ${item.vehiculo?.descripcionEstado || 'Sin descripción'}</p>
+            <p><strong>Kilometraje:</strong> ${item.vehiculo?.kilometraje || '—'}</p>
             <hr>
-            <p><strong>Acompañante Principal:</strong> ${item.acompanantePrincipal.nombre || '—'} (${item.acompanantePrincipal.legajo || '—'})</p>
-            <p><strong>Acompañante Opcional:</strong> ${item.acompananteOpcional.nombre || '—'} (${item.acompananteOpcional.legajo || '—'})</p>
+            <p><strong>Acompañante Principal:</strong> ${item.acompanantePrincipal?.nombre || '—'} (${item.acompanantePrincipal?.legajo || '—'})</p>
+            <p><strong>Acompañante Opcional:</strong> ${item.acompananteOpcional?.nombre || '—'} (${item.acompananteOpcional?.legajo || '—'})</p>
         `;
 
         if (modalBody) modalBody.innerHTML = html;
@@ -1052,6 +1032,7 @@ window.showDetailsModal = (item) => {
         return; 
     }
 
+    // --- LÓGICA ORIGINAL PARA LAS DEMÁS PESTAÑAS (MANTIENE TODO IGUAL) ---
     const isBaseCheck = sheetType === "verificacion de bases";
     const isMovilCheck = sheetType !== "Verificacion de objetivos MAC" && sheetType !== "Verificacion de sitios Aysa" && !isBaseCheck;
     let basesFaltas = [];
@@ -1080,7 +1061,6 @@ window.showDetailsModal = (item) => {
 
     if (isBaseCheck) {
         basesFaltas = getBasesAlertDetails(item);
-
         if (basesFaltas.length > 0) {
             html += `<h4 class="text-danger">🚨 Faltas en la Base:</h4><ul>`;
             basesFaltas.forEach(falta => { html += `<li><strong class="text-danger">${falta}</strong></li>`; });
@@ -1109,7 +1089,6 @@ window.showDetailsModal = (item) => {
 
         let baseDetailsHtml = `<h4>Información del Chequeo:</h4>`;
         let hasBaseInfo = false;
-
         baseDetailFields.forEach(field => {
              const value = item[field.key];
              if (value && value.toString().trim().toUpperCase() !== 'N/A') {
@@ -1118,7 +1097,6 @@ window.showDetailsModal = (item) => {
                  hasBaseInfo = true;
              }
         });
-
         if (hasBaseInfo) html += baseDetailsHtml;
 
     } else if (isMovilCheck) { 
