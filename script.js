@@ -184,16 +184,17 @@ const getDateSortValue = (timestampString) => {
 // ====================================================================================================
 // 2.5. MOTOR DE AUDITORÍA CRUZADA (CAMBIO DE TURNO)
 // ====================================================================================================
+// ====================================================================================================
+// MOTOR DE AUDITORÍA CRUZADA (CAMBIO DE TURNO) - VERSIÓN NOMINAL ESTRICTA
+// ====================================================================================================
 
 const runAuditControls = (data) => {
     if (currentSheet !== "Cambio de Turno" || data.length === 0) return data;
 
     const vehicles = {};
-    const THIRTY_MINS_MS = 30 * 60 * 1000;
-    const MAX_KM_JUMP = 1500; // Tolerancia máxima de km por turno (ajustable)
+    const MAX_KM_JUMP = 1500; 
 
-    // Agrupamos por patente para evaluar la historia de cada móvil
-    // Leemos el array al revés (slice().reverse()) para procesar desde el registro más viejo al más nuevo
+    // Agrupamos y ordenamos cronológicamente (del más viejo al más nuevo)
     data.slice().reverse().forEach(item => {
         const patente = item.vehiculo?.patente;
         if (!patente || patente === '—') return;
@@ -203,29 +204,30 @@ const runAuditControls = (data) => {
 
     Object.keys(vehicles).forEach(patente => {
         let expectedNextAction = null;
-        let lastKm = null;
+        let lastRecord = null; // Memoria del último turno para auditoría cruzada
 
         vehicles[patente].forEach(record => {
-            record.auditAlerts = []; // Iniciamos el array de alertas limpio
-
+            record.auditAlerts = [];
+            
+            // Datos del implicado actual
+            const conductorActual = record.conductor?.nombre || 'Conductor actual';
+            
             const isInicio = record.turno?.inicio && record.turno.inicio !== '—';
             const isSalida = record.turno?.salida && record.turno.salida !== '—';
             
-            // Determinamos qué acción está haciendo el guardia
             let currentAction = null;
             let reportedTime = null;
 
-            if (isInicio && !isSalida) { currentAction = 'inicio'; reportedTime = record.turno.inicio; }
+            if (isInicio && !isSalida) { currentAction = 'ingreso'; reportedTime = record.turno.inicio; }
             else if (isSalida && !isInicio) { currentAction = 'salida'; reportedTime = record.turno.salida; }
-            else if (isInicio && isSalida) { currentAction = 'ambos'; } // Legacy data
+            else if (isInicio && isSalida) { currentAction = 'ambos'; }
 
-            // --- REGLA 1: Desfasaje de Tiempo (> 30 min) ---
+            // --- REGLA 1: Desfasaje de Tiempo ---
             if (currentAction !== 'ambos' && reportedTime) {
                  let reportedMs = 0;
                  if (reportedTime.includes('/')) {
-                     reportedMs = getDateSortValue(reportedTime); // Data legacy (viene fecha completa)
+                     reportedMs = getDateSortValue(reportedTime); 
                  } else {
-                     // Data nueva (solo hora), unimos con la fecha del timestamp
                      const datePart = record.timestamp.split(',')[0].trim();
                      reportedMs = getDateSortValue(`${datePart} ${reportedTime}`);
                  }
@@ -234,36 +236,40 @@ const runAuditControls = (data) => {
                  if (formMs > 0 && reportedMs > 0) {
                      const diffMins = Math.abs(formMs - reportedMs) / 60000;
                      if (diffMins > 30) {
-                         record.auditAlerts.push(`⏱️ Carga a destiempo: Diferencia de ${Math.round(diffMins)} min entre el suceso reportado y el envío del formulario.`);
+                         record.auditAlerts.push(`⏱️ Carga a destiempo: ${conductorActual} envió el reporte con ${Math.round(diffMins)} min de retraso respecto al horario declarado.`);
                      }
                  }
             }
 
-            // --- REGLA 2: Secuencia Rota (Falta Entrada/Salida) ---
-            if (currentAction === 'inicio' || currentAction === 'salida') {
+            // --- REGLA 2: Secuencia Rota Nominal ---
+            if (currentAction === 'ingreso' || currentAction === 'salida') {
                  if (expectedNextAction && currentAction !== expectedNextAction) {
-                     record.auditAlerts.push(`🔄 Secuencia Rota: Se registró un ${currentAction.toUpperCase()} pero el sistema esperaba un ${expectedNextAction.toUpperCase()}.`);
+                     const conductorAnterior = lastRecord?.conductor?.nombre || 'un turno previo';
+                     const fechaAnterior = lastRecord?.timestamp || 'fecha desconocida';
+                     const accionFaltante = expectedNextAction.toUpperCase();
+                     
+                     record.auditAlerts.push(`🔄 Omisión: ${conductorActual} reportó un ${currentAction.toUpperCase()}, pero falta el reporte de ${accionFaltante} correspondiente al último turno de ${conductorAnterior} (${fechaAnterior}).`);
                  }
-                 expectedNextAction = currentAction === 'inicio' ? 'salida' : 'inicio';
+                 expectedNextAction = currentAction === 'ingreso' ? 'salida' : 'ingreso';
             }
 
-            // --- REGLA 3: Control de Kilometraje Irreal ---
+            // --- REGLA 3: Auditoría de Kilometraje Nominal ---
             const currentKm = parseInt(record.vehiculo?.kilometraje, 10);
             if (!isNaN(currentKm)) {
-                 if (lastKm !== null) {
+                 if (lastRecord && !isNaN(parseInt(lastRecord.vehiculo?.kilometraje, 10))) {
+                     const lastKm = parseInt(lastRecord.vehiculo.kilometraje, 10);
+                     const conductorAnterior = lastRecord.conductor?.nombre || 'el conductor anterior';
+                     
                      if (currentKm < lastKm) {
-                         record.auditAlerts.push(`📉 Kilometraje Negativo: El móvil bajó de ${lastKm} a ${currentKm} km.`);
+                         record.auditAlerts.push(`📉 KM Inconsistente: ${conductorActual} tomó el móvil con ${currentKm} km, pero ${conductorAnterior} lo había dejado con ${lastKm} km.`);
                      } else if ((currentKm - lastKm) > MAX_KM_JUMP) {
-                         record.auditAlerts.push(`📈 Salto Irreal: El kilometraje subió excesivamente (+${currentKm - lastKm} km) desde el turno anterior.`);
+                         record.auditAlerts.push(`📈 Salto Irreal: Diferencia de +${currentKm - lastKm} km respecto a la última lectura de ${conductorAnterior}.`);
                      }
                  }
-                 lastKm = currentKm;
             }
 
-            // Si detectó fraude o error, marcamos la fila como alerta para el Dashboard
-            if (record.auditAlerts.length > 0) {
-                 record.hasAlert = true; 
-            }
+            lastRecord = record; // Actualizamos la memoria para el próximo ciclo
+            if (record.auditAlerts.length > 0) record.hasAlert = true; 
         });
     });
 
