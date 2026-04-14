@@ -194,7 +194,16 @@ const runAuditControls = (data) => {
     const vehicles = {};
     const MAX_KM_JUMP = 1500; 
 
-    // Agrupamos y ordenamos cronológicamente (del más viejo al más nuevo)
+    // Helper: Extrae todos los nombres de la tripulación ignorando los vacíos
+    const getTripulacion = (rec) => {
+        if (!rec) return 'un turno previo';
+        const trip = [];
+        if (rec.conductor?.nombre && rec.conductor.nombre !== '—') trip.push(rec.conductor.nombre);
+        if (rec.acompanantePrincipal?.nombre && rec.acompanantePrincipal.nombre !== '—') trip.push(rec.acompanantePrincipal.nombre);
+        if (rec.acompananteOpcional?.nombre && rec.acompananteOpcional.nombre !== '—') trip.push(rec.acompananteOpcional.nombre);
+        return trip.length > 0 ? trip.join(', ') : 'turno previo';
+    };
+
     data.slice().reverse().forEach(item => {
         const patente = item.vehiculo?.patente;
         if (!patente || patente === '—') return;
@@ -204,14 +213,12 @@ const runAuditControls = (data) => {
 
     Object.keys(vehicles).forEach(patente => {
         let expectedNextAction = null;
-        let lastRecord = null; // Memoria del último turno para auditoría cruzada
+        let lastRecord = null; 
 
         vehicles[patente].forEach(record => {
             record.auditAlerts = [];
             
-            // Datos del implicado actual
             const conductorActual = record.conductor?.nombre || 'Conductor actual';
-            
             const isInicio = record.turno?.inicio && record.turno.inicio !== '—';
             const isSalida = record.turno?.salida && record.turno.salida !== '—';
             
@@ -236,39 +243,39 @@ const runAuditControls = (data) => {
                  if (formMs > 0 && reportedMs > 0) {
                      const diffMins = Math.abs(formMs - reportedMs) / 60000;
                      if (diffMins > 30) {
-                         record.auditAlerts.push(`⏱️ Carga a destiempo: ${conductorActual} envió el reporte con ${Math.round(diffMins)} min de retraso respecto al horario declarado.`);
+                         record.auditAlerts.push(`⏱️ Carga a destiempo: El reporte se envió con ${Math.round(diffMins)} min de retraso respecto al horario declarado por la tripulación.`);
                      }
                  }
             }
 
-            // --- REGLA 2: Secuencia Rota Nominal ---
+            // --- REGLA 2: Secuencia Rota (Tripulación) ---
             if (currentAction === 'ingreso' || currentAction === 'salida') {
                  if (expectedNextAction && currentAction !== expectedNextAction) {
-                     const conductorAnterior = lastRecord?.conductor?.nombre || 'un turno previo';
+                     const equipoAnterior = getTripulacion(lastRecord);
                      const fechaAnterior = lastRecord?.timestamp || 'fecha desconocida';
                      const accionFaltante = expectedNextAction.toUpperCase();
                      
-                     record.auditAlerts.push(`🔄 Omisión: ${conductorActual} reportó un ${currentAction.toUpperCase()}, pero falta el reporte de ${accionFaltante} correspondiente al último turno de ${conductorAnterior} (${fechaAnterior}).`);
+                     record.auditAlerts.push(`🔄 Omisión: Se reportó un ${currentAction.toUpperCase()}, pero falta la ${accionFaltante} de la guardia anterior (Tripulación: ${equipoAnterior}) del ${fechaAnterior}.`);
                  }
                  expectedNextAction = currentAction === 'ingreso' ? 'salida' : 'ingreso';
             }
 
-            // --- REGLA 3: Auditoría de Kilometraje Nominal ---
+            // --- REGLA 3: Auditoría de Kilometraje (Tripulación) ---
             const currentKm = parseInt(record.vehiculo?.kilometraje, 10);
             if (!isNaN(currentKm)) {
                  if (lastRecord && !isNaN(parseInt(lastRecord.vehiculo?.kilometraje, 10))) {
                      const lastKm = parseInt(lastRecord.vehiculo.kilometraje, 10);
-                     const conductorAnterior = lastRecord.conductor?.nombre || 'el conductor anterior';
+                     const equipoAnterior = getTripulacion(lastRecord);
                      
                      if (currentKm < lastKm) {
-                         record.auditAlerts.push(`📉 KM Inconsistente: ${conductorActual} tomó el móvil con ${currentKm} km, pero ${conductorAnterior} lo había dejado con ${lastKm} km.`);
+                         record.auditAlerts.push(`📉 KM Inconsistente: El móvil se tomó con ${currentKm} km, pero la guardia anterior (${equipoAnterior}) lo dejó con ${lastKm} km.`);
                      } else if ((currentKm - lastKm) > MAX_KM_JUMP) {
-                         record.auditAlerts.push(`📈 Salto Irreal: Diferencia de +${currentKm - lastKm} km respecto a la última lectura de ${conductorAnterior}.`);
+                         record.auditAlerts.push(`📈 Salto Irreal: Diferencia de +${currentKm - lastKm} km respecto a la última lectura de la guardia anterior (${equipoAnterior}).`);
                      }
                  }
             }
 
-            lastRecord = record; // Actualizamos la memoria para el próximo ciclo
+            lastRecord = record; 
             if (record.auditAlerts.length > 0) record.hasAlert = true; 
         });
     });
@@ -1265,11 +1272,13 @@ function renderCambioTurnoTable(data) {
             ? `<span style="color:#004d99; font-weight:bold;">🟢 Ingreso:</span> ${item.turno.inicio}` 
             : `<span style="color:#dc3545; font-weight:bold;">🔴 Salida:</span> ${item.turno.salida}`;
 
-        // Insignia de Auditoría Automática
-        let auditBadge = '<span style="padding: 4px 8px; border-radius: 4px; color: white; background: #28a745; font-size: 0.85em;">En Regla</span>';
+        // Diseño base "Todo en regla"
+        let auditBadge = '<span style="display: inline-block; padding: 6px 12px; border-radius: 20px; color: #155724; background-color: #d4edda; border: 1px solid #c3e6cb; font-size: 0.85em; white-space: nowrap; font-weight: bold;">✅ En Regla</span>';
+        
+        // Diseño de Alerta (Estilo Píldora moderna, no se rompe)
         if (item.auditAlerts && item.auditAlerts.length > 0) {
-            auditBadge = `<span style="padding: 4px 8px; border-radius: 4px; color: white; background: #dc3545; font-size: 0.85em; cursor: help;" title="${item.auditAlerts.join(' | ')}">
-                ⚠️ ${item.auditAlerts.length} Observaciones
+            auditBadge = `<span style="display: inline-block; padding: 6px 12px; border-radius: 20px; color: #721c24; background-color: #f8d7da; border: 1px solid #f5c6cb; font-size: 0.85em; white-space: nowrap; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.05);" title="Revise los detalles">
+                ⚠️ ${item.auditAlerts.length} Alerta(s)
             </span>`;
         }
 
