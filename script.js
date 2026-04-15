@@ -253,9 +253,15 @@ const runAuditControls = (data) => {
                  if (expectedNextAction && currentAction !== expectedNextAction) {
                      const equipoAnterior = getTripulacion(lastRecord);
                      const fechaAnterior = lastRecord?.timestamp || 'fecha desconocida';
-                     const accionFaltante = expectedNextAction.toUpperCase();
                      
-                     record.auditAlerts.push(`🔄 Omisión: Se reportó un ${currentAction.toUpperCase()}, pero falta la ${accionFaltante} de la guardia anterior (Tripulación: ${equipoAnterior}) del ${fechaAnterior}.`);
+                     // Lógica gramatical dinámica para concordancia de género
+                     const articuloActual = currentAction === 'ingreso' ? 'un' : 'una';
+                     const articuloFaltante = expectedNextAction === 'ingreso' ? 'el' : 'la';
+                     
+                     const accionActualStr = currentAction.toUpperCase();
+                     const accionFaltanteStr = expectedNextAction.toUpperCase();
+                     
+                     record.auditAlerts.push(`🔄 Omisión: Se reportó ${articuloActual} ${accionActualStr}, pero falta ${articuloFaltante} ${accionFaltanteStr} de la guardia anterior (Tripulación: ${equipoAnterior}) del ${fechaAnterior}.`);
                  }
                  expectedNextAction = currentAction === 'ingreso' ? 'salida' : 'ingreso';
             }
