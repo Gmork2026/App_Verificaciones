@@ -1240,13 +1240,66 @@ const initialize = () => {
 
 function renderCambioTurnoTable(data) {
     if (!dataContainer) return;
-
     dataContainer.innerHTML = '';
+
     if (data.length === 0) {
-        dataContainer.innerHTML = '<p class="text-center text-muted p-4">No hay registros para mostrar en esta página.</p>';
+        dataContainer.innerHTML = '<p class="text-center text-muted p-4">No hay registros.</p>';
         return;
     }
 
+    // DETECCIÓN DE MÓVIL (Pantallas menores a 768px)
+    const isMobile = window.innerWidth < 768;
+
+    if (isMobile) {
+        renderCambioTurnoMobile(data);
+    } else {
+        renderCambioTurnoDesktop(data);
+    }
+}
+
+// --- VISTA MOBILE (TARJETAS) ---
+function renderCambioTurnoMobile(data) {
+    let html = '<div class="mobile-audit-container">';
+    
+    data.forEach(item => {
+        const isAlert = item.auditAlerts && item.auditAlerts.length > 0;
+        const pillClass = isAlert ? 'pill-danger' : 'pill-success';
+        const pillText = isAlert ? `⚠️ ${item.auditAlerts.length} Alerta(s)` : '✅ En Regla';
+        const itemDataString = JSON.stringify(item);
+
+        html += `
+            <div class="audit-card ${item.hasAlert ? 'border-alert' : ''}">
+                <div class="audit-card-header">
+                    <strong>🚗 ${item.vehiculo.patente}</strong>
+                    <span>${item.timestamp.split(',')[0]}</span>
+                </div>
+                <div class="audit-card-body">
+                    <p><strong>👤 Conductor:</strong> ${item.conductor.nombre}</p>
+                    <p><strong>📍 Evento:</strong> ${item.turno.inicio !== '—' ? '🟢 Ingreso' : '🔴 Salida'}</p>
+                    <p><strong>🛣️ KM:</strong> ${item.vehiculo.kilometraje}</p>
+                    <div class="audit-pill ${pillClass}">${pillText}</div>
+                </div>
+                <div class="audit-card-actions">
+                    <button class="btn-mobile" style="background: #004d99; color: white;" 
+                        onclick="window.showDetailsModal(JSON.parse(decodeURIComponent('${encodeURIComponent(itemDataString)}')))">
+                        Ver Alertas
+                    </button>
+                    <button class="btn-mobile" style="background: #e2e8f0; color: #4a5568;" 
+                        onclick="alert('Función de validación rápida próximamente')">
+                        Validar
+                    </button>
+                </div>
+            </div>
+        `;
+    });
+
+    html += '</div>';
+    dataContainer.innerHTML = html;
+}
+
+// --- VISTA DESKTOP (TABLA ORIGINAL MEJORADA) ---
+function renderCambioTurnoDesktop(data) {
+    // Aquí pegas el código de la tabla que ya teníamos (con la columna de Auditoría)
     let html = `
         <table class="data-table table-responsive cambio-turno-table">
             <thead>
